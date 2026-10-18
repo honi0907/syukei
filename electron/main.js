@@ -24,7 +24,11 @@ let lastServerErrorLog = '';
 
 function getAppRoot() {
     if (app.isPackaged) {
-        return path.join(process.resourcesPath, 'app');
+        const asarPath = app.getAppPath();
+        if (asarPath.endsWith('.asar')) {
+            return `${asarPath}.unpacked`;
+        }
+        return asarPath;
     }
     return path.join(__dirname, '..');
 }
@@ -224,34 +228,49 @@ function startServerProcess() {
             resolve(result);
         };
 
-        serverProcess = spawn(process.execPath, [serverScript], {
-            cwd: appRoot,
-            env: {
-                ...process.env,
-                ELECTRON_RUN_AS_NODE: '1'
-            },
-            stdio: ['ignore', 'pipe', 'pipe'],
-            windowsHide: true
-        });
-
-        serverProcess.stdout?.on('data', (chunk) => appendServerLog(chunk, false));
-        serverProcess.stderr?.on('data', (chunk) => appendServerLog(chunk, true));
-
-        serverProcess.on('exit', (code) => {
-            serverProcess = null;
-            if (!settled && code !== 0) {
-                const detail = lastServerErrorLog.trim();
-                const message = detail.includes('EADDRINUSE') || detail.includes('使用中')
-                    ? `ポート ${PORT} が使用中です。以前起動したサーバーが残っている可能性があります。`
-                    : detail || `サーバーが異常終了しました（コード: ${code}）`;
-                finish({ ok: false, error: message });
-                broadcastServerStatus({ state: 'error', message });
+        if (app.isPackaged) {
+            try {
+                process.chdir(appRoot);
+                const serverModule = require(serverScript);
+                serverModule.startServer();
+                serverProcess = { inProcess: true, server: serverModule.server };
+            } catch (error) {
+                finish({
+                    ok: false,
+                    error: error instanceof Error ? error.message : 'サーバーの起動に失敗しました。'
+                });
                 return;
             }
-            if (settled) {
-                broadcastServerStatus({ state: 'stopped' });
-            }
-        });
+        } else {
+            serverProcess = spawn(process.execPath, [serverScript], {
+                cwd: appRoot,
+                env: {
+                    ...process.env,
+                    ELECTRON_RUN_AS_NODE: '1'
+                },
+                stdio: ['ignore', 'pipe', 'pipe'],
+                windowsHide: true
+            });
+
+            serverProcess.stdout?.on('data', (chunk) => appendServerLog(chunk, false));
+            serverProcess.stderr?.on('data', (chunk) => appendServerLog(chunk, true));
+
+            serverProcess.on('exit', (code) => {
+                serverProcess = null;
+                if (!settled && code !== 0) {
+                    const detail = lastServerErrorLog.trim();
+                    const message = detail.includes('EADDRINUSE') || detail.includes('使用中')
+                        ? `ポート ${PORT} が使用中です。以前起動したサーバーが残っている可能性があります。`
+                        : detail || `サーバーが異常終了しました（コード: ${code}）`;
+                    finish({ ok: false, error: message });
+                    broadcastServerStatus({ state: 'error', message });
+                    return;
+                }
+                if (settled) {
+                    broadcastServerStatus({ state: 'stopped' });
+                }
+            });
+        }
 
         const ready = await waitForServerReady();
         if (!ready) {
@@ -271,7 +290,14 @@ function startServerProcess() {
 }
 
 async function stopServerProcess() {
-    if (serverProcess) {
+    if (serverProcess?.inProcess) {
+        await new Promise((resolve) => {
+            serverProcess.server.close(() => {
+                serverProcess = null;
+                resolve(undefined);
+            });
+        });
+    } else if (serverProcess) {
         await new Promise((resolve) => {
             const proc = serverProcess;
             const forceKillTimer = setTimeout(() => {

@@ -30,7 +30,7 @@ try {
 }
 
 // 静的ファイル配信
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // データ管理
 const scores = {}; // {clientId: {name, score, locked, unlockRequested}}
@@ -1014,16 +1014,8 @@ function getLocalIPAddress() {
     return 'localhost';
 }
 
-server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-        console.error(`ERROR: ポート ${PORT} は既に使用中です。他の集計サーバーを終了してから再起動してください。`);
-    } else {
-        console.error('ERROR: サーバー起動失敗:', err.message);
-    }
-    process.exit(1);
-});
-
-server.listen(PORT, () => {
+function startServer() {
+    server.listen(PORT, () => {
     const localIP = getLocalIPAddress();
     
     console.log(`
@@ -1050,4 +1042,22 @@ Chromeキオスクモード（終了はAlt+F4）:
   start chrome --app=http://${localIP}:${PORT}/client --start-fullscreen
 ========================================
     `);
+    });
+}
+
+server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error(`ERROR: ポート ${PORT} は既に使用中です。他の集計サーバーを終了してから再起動してください。`);
+    } else {
+        console.error('ERROR: サーバー起動失敗:', err.message);
+    }
+    if (require.main === module) {
+        process.exit(1);
+    }
 });
+
+if (require.main === module) {
+    startServer();
+}
+
+module.exports = { startServer, server, PORT };

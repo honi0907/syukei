@@ -16,6 +16,12 @@
     "main": "electron/main.js"
   },
   "asar": true,
+  "asarUnpack": [
+    "server.js",
+    "public/**/*",
+    "teamname.txt",
+    "node_modules/**/*"
+  ],
   "win": {
     "target": ["nsis"],
     "signAndEditExecutable": false
