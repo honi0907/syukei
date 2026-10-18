@@ -1,0 +1,29 @@
+{
+  "appId": "jp.syukei.client",
+  "productName": "集計システム 子機",
+  "directories": {
+    "output": "dist/child"
+  },
+  "files": [
+    "electron/koki/**/*",
+    "public/styles.css",
+    "package.json"
+  ],
+  "extraMetadata": {
+    "main": "electron/koki/main.js"
+  },
+  "asar": true,
+  "win": {
+    "target": ["nsis"]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "artifactName": "${productName}-Setup-${version}.${ext}"
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "honi0907",
+    "repo": "syukei"
+  }
+}

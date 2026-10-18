@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>得点発表 設定</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/ranking-settings.js" defer></script>
+</head>
+<body class="settings-page">
+    <div class="settings-shell">
+        <aside class="settings-sidebar">
+            <div class="settings-sidebar-header">
+                <h1>設定</h1>
+                <p>得点発表の見た目・動き</p>
+            </div>
+            <nav class="settings-nav">
+                <button type="button" class="settings-nav-item active" data-panel="layout">レイアウト</button>
+                <button type="button" class="settings-nav-item" data-panel="animation">アニメーション</button>
+                <button type="button" class="settings-nav-item" data-panel="digit-style">数字の見た目</button>
+                <button type="button" class="settings-nav-item" data-panel="team-style">チーム名の見た目</button>
+                <button type="button" class="settings-nav-item" data-panel="font">フォント</button>
+                <button type="button" class="settings-nav-item" data-panel="app">バージョン</button>
+            </nav>
+            <p class="settings-sidebar-note">変更は開いている得点発表画面に即時反映されます。</p>
+        </aside>
+
+        <main class="settings-main">
+            <section id="panel-layout" class="settings-panel active">
+                <header class="settings-panel-header">
+                    <h2>レイアウト</h2>
+                    <p>点数・チーム名のサイズと位置</p>
+                </header>
+
+                <div class="settings-field">
+                    <label for="digitSize">点数サイズ</label>
+                    <input type="range" id="digitSize" min="10" max="50" value="18" step="1" oninput="updateDigitSize(this.value)">
+                    <div class="settings-field-value"><span id="digitSizeValue">18</span> rem</div>
+                </div>
+
+                <div class="settings-field">
+                    <label for="digitGap">数字の間隔</label>
+                    <input type="range" id="digitGap" min="5" max="50" value="15" step="1" oninput="updateDigitGap(this.value)">
+                    <div class="settings-field-value"><span id="digitGapValue">15</span> px</div>
+                </div>
+
+                <div class="settings-field">
+                    <label for="companyNamePosition">チーム名の位置（上から）</label>
+                    <input type="range" id="companyNamePosition" min="5" max="40" value="20" step="1" oninput="updateCompanyNamePosition(this.value)">
+                    <div class="settings-field-value"><span id="companyNamePositionValue">20</span> %</div>
+                </div>
+
+                <div class="settings-field-row">
+                    <div class="settings-field">
+                        <label for="scoreTop">点数の縦位置</label>
+                        <input type="range" id="scoreTop" min="10" max="90" value="50" step="1" oninput="updateScorePosition()">
+                        <div class="settings-field-value"><span id="scoreTopValue">50</span> %</div>
+                    </div>
+                    <div class="settings-field">
+                        <label for="scoreLeft">点数の横位置</label>
+                        <input type="range" id="scoreLeft" min="10" max="90" value="50" step="1" oninput="updateScorePosition()">
+                        <div class="settings-field-value"><span id="scoreLeftValue">50</span> %</div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="panel-animation" class="settings-panel">
+                <header class="settings-panel-header">
+                    <h2>アニメーション</h2>
+                    <p>桁の停止タイミングと100点演出</p>
+                </header>
+
+                <div class="settings-field-row">
+                    <div class="settings-field">
+                        <label for="digit1StopTime">1桁目（十の位）停止</label>
+                        <input type="number" id="digit1StopTime" min="0" max="20" value="11" step="0.1" oninput="updateStopTiming()">
+                        <div class="settings-field-hint">秒</div>
+                    </div>
+                    <div class="settings-field">
+                        <label for="digit2StopTime">2桁目（一の位）停止</label>
+                        <input type="number" id="digit2StopTime" min="0" max="20" value="13" step="0.1" oninput="updateStopTiming()">
+                        <div class="settings-field-hint">秒</div>
+                    </div>
+                </div>
+
+                <div class="settings-field">
+                    <label for="perfectEffect">100点演出</label>
+                    <select id="perfectEffect" onchange="updatePerfectEffect()">
+                        <option value="none">なし</option>
+                        <option value="confetti">紙吹雪</option>
+                        <option value="stars">星の輝き</option>
+                        <option value="fireworks">花火</option>
+                        <option value="sparkle-band">帯キラキラ</option>
+                    </select>
+                </div>
+            </section>
+
+            <section id="panel-digit-style" class="settings-panel">
+                <header class="settings-panel-header">
+                    <h2>数字の見た目</h2>
+                    <p>グラデーションと影</p>
+                </header>
+
+                <div class="settings-field-row settings-color-row">
+                    <div class="settings-field">
+                        <label for="digitGradientColor1">明るい部分</label>
+                        <input type="color" id="digitGradientColor1" value="#A8D5F7" oninput="updateDigitGradientColors()">
+                    </div>
+                    <div class="settings-field">
+                        <label for="digitGradientColor2">中間色</label>
+                        <input type="color" id="digitGradientColor2" value="#4A90D9" oninput="updateDigitGradientColors()">
+                    </div>
+                    <div class="settings-field">
+                        <label for="digitGradientColor3">濃い部分</label>
+                        <input type="color" id="digitGradientColor3" value="#0A2A47" oninput="updateDigitGradientColors()">
+                    </div>
+                </div>
+
+                <div class="settings-field">
+                    <label for="digitShadowBlur">影のぼかし</label>
+                    <input type="range" id="digitShadowBlur" min="0" max="50" value="15" step="1" oninput="updateDigitShadowBlur(this.value)">
+                    <div class="settings-field-value"><span id="digitShadowBlurValue">15</span> px</div>
+                </div>
+
+                <div class="settings-field">
+                    <label for="digitShadowOpacity">影の濃さ</label>
+                    <input type="range" id="digitShadowOpacity" min="0" max="100" value="30" step="1" oninput="updateDigitShadowOpacity(this.value)">
+                    <div class="settings-field-value"><span id="digitShadowOpacityValue">30</span> %</div>
+                </div>
+            </section>
+
+            <section id="panel-team-style" class="settings-panel">
+                <header class="settings-panel-header">
+                    <h2>チーム名の見た目</h2>
+                    <p>グラデーションと影</p>
+                </header>
+
+                <div class="settings-field-row settings-color-row">
+                    <div class="settings-field">
+                        <label for="companyGradientColor1">明るい部分</label>
+                        <input type="color" id="companyGradientColor1" value="#A8D5F7" oninput="updateCompanyGradientColors()">
+                    </div>
+                    <div class="settings-field">
+                        <label for="companyGradientColor2">中間色</label>
+                        <input type="color" id="companyGradientColor2" value="#4A90D9" oninput="updateCompanyGradientColors()">
+                    </div>
+                    <div class="settings-field">
+                        <label for="companyGradientColor3">濃い部分</label>
+                        <input type="color" id="companyGradientColor3" value="#0A2A47" oninput="updateCompanyGradientColors()">
+                    </div>
+                </div>
+
+                <div class="settings-field">
+                    <label for="companyShadowBlur">影のぼかし</label>
+                    <input type="range" id="companyShadowBlur" min="0" max="50" value="15" step="1" oninput="updateCompanyShadowBlur(this.value)">
+                    <div class="settings-field-value"><span id="companyShadowBlurValue">15</span> px</div>
+                </div>
+
+                <div class="settings-field">
+                    <label for="companyShadowOpacity">影の濃さ</label>
+                    <input type="range" id="companyShadowOpacity" min="0" max="100" value="30" step="1" oninput="updateCompanyShadowOpacity(this.value)">
+                    <div class="settings-field-value"><span id="companyShadowOpacityValue">30</span> %</div>
+                </div>
+            </section>
+
+            <section id="panel-font" class="settings-panel">
+                <header class="settings-panel-header">
+                    <h2>フォント</h2>
+                    <p>得点発表画面の表示フォント</p>
+                </header>
+
+                <div class="font-selector settings-font-block">
+                    <button type="button" id="loadLocalFontsBtn" class="btn btn-primary btn-full settings-load-fonts-btn">
+                        PCのフォントを読み込む
+                    </button>
+                    <label for="fontSelect">ランキング表示フォント</label>
+                    <select id="fontSelect" onchange="changeFont()"></select>
+                    <div class="font-preview" id="fontPreview">
+                        <div class="preview-text">プレビュー Preview 123</div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="panel-app" class="settings-panel">
+                <header class="settings-panel-header">
+                    <h2>バージョン</h2>
+                    <p>アプリのバージョン確認と更新</p>
+                </header>
+
+                <div class="settings-field">
+                    <label>サーバー（集計システム）</label>
+                    <div id="appVersion" class="settings-version-line" data-version="">—</div>
+                </div>
+                <div class="settings-field">
+                    <label>デスクトップアプリ</label>
+                    <div id="desktopVersion" class="settings-version-line">—</div>
+                </div>
+                <div class="settings-field">
+                    <button type="button" id="checkUpdateBtn" class="btn btn-primary">更新を確認</button>
+                    <p id="updateStatus" class="settings-update-status"></p>
+                    <button type="button" id="openReleaseBtn" class="btn btn-secondary btn-full settings-release-btn" hidden>
+                        ダウンロードページを開く
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+</body>
+</html>

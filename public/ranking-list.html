@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ランキング発表</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic', YuGothic, Meiryo, sans-serif;
+            color: #ffffff;
+            overflow: hidden;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* 背景アクセント */
+        body::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(255, 215, 0, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+        }
+
+        .header {
+            text-align: center;
+            padding: 30px;
+            background: linear-gradient(180deg, rgba(255, 215, 0, 0.2) 0%, transparent 100%);
+            border-bottom: 3px solid #ffd700;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            position: relative;
+            z-index: 10;
+        }
+
+        .round-title {
+            font-size: 3.5rem;
+            font-weight: 900;
+            background: linear-gradient(90deg, #ffd700 0%, #ffed4e 50%, #ffd700 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
+            animation: titleGlow 2s ease-in-out infinite;
+            letter-spacing: 3px;
+        }
+
+        @keyframes titleGlow {
+            0%, 100% { filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.8)); }
+            50% { filter: drop-shadow(0 0 25px rgba(255, 215, 0, 1)); }
+        }
+
+        .subtitle {
+            font-size: 1.5rem;
+            color: #ffffff;
+            opacity: 0.95;
+        }
+
+        .ranking-container {
+            padding: 30px 50px;
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .ranking-item {
+            display: flex;
+            align-items: center;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.05) 100%);
+            border-radius: 15px;
+            padding: 25px 35px;
+            margin-bottom: 15px;
+            opacity: 0;
+            transform: translateY(50px) scale(0.95);
+            transition: all 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .ranking-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 6px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.2) 100%);
+        }
+
+        .ranking-item.show {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        .ranking-item.rank-1 {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.35) 0%, rgba(255, 215, 0, 0.15) 100%);
+            border: 3px solid #ffd700;
+            box-shadow: 0 12px 40px rgba(255, 215, 0, 0.5), 0 0 60px rgba(255, 215, 0, 0.3);
+            transform: scale(1.05);
+        }
+
+        .ranking-item.rank-1::before {
+            width: 8px;
+            background: linear-gradient(180deg, #ffd700 0%, #ffed4e 100%);
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+        }
+
+        .ranking-item.rank-2 {
+            background: linear-gradient(135deg, rgba(192, 192, 192, 0.3) 0%, rgba(192, 192, 192, 0.12) 100%);
+            border: 2px solid #c0c0c0;
+            box-shadow: 0 10px 35px rgba(192, 192, 192, 0.4), 0 0 40px rgba(192, 192, 192, 0.2);
+        }
+
+        .ranking-item.rank-2::before {
+            width: 7px;
+            background: linear-gradient(180deg, #c0c0c0 0%, #e8e8e8 100%);
+            box-shadow: 0 0 15px rgba(192, 192, 192, 0.6);
+        }
+
+        .ranking-item.rank-3 {
+            background: linear-gradient(135deg, rgba(205, 127, 50, 0.3) 0%, rgba(205, 127, 50, 0.12) 100%);
+            border: 2px solid #cd7f32;
+            box-shadow: 0 10px 35px rgba(205, 127, 50, 0.4), 0 0 40px rgba(205, 127, 50, 0.2);
+        }
+
+        .ranking-item.rank-3::before {
+            width: 7px;
+            background: linear-gradient(180deg, #cd7f32 0%, #e8a76a 100%);
+            box-shadow: 0 0 15px rgba(205, 127, 50, 0.6);
+        }
+
+        /* 4位以下のサイズを小さく */
+        .ranking-item:not(.rank-1):not(.rank-2):not(.rank-3) {
+            padding: 15px 25px;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+        }
+
+        .rank-number {
+            font-size: 4.5rem;
+            font-weight: 900;
+            width: 140px;
+            text-align: center;
+            margin-right: 35px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+        }
+
+        /* 4位以下の順位番号を小さく */
+        .ranking-item:not(.rank-1):not(.rank-2):not(.rank-3) .rank-number {
+            font-size: 2.2rem;
+            width: 80px;
+            margin-right: 25px;
+        }
+
+        .rank-1 .rank-number {
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 0 25px rgba(255, 215, 0, 1));
+            animation: rankGlow 1.5s ease-in-out infinite;
+        }
+
+        @keyframes rankGlow {
+            0%, 100% { filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.8)); }
+            50% { filter: drop-shadow(0 0 35px rgba(255, 215, 0, 1)); }
+        }
+
+        .rank-2 .rank-number {
+            background: linear-gradient(135deg, #e8e8e8 0%, #c0c0c0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 0 15px rgba(192, 192, 192, 0.8));
+        }
+
+        .rank-3 .rank-number {
+            background: linear-gradient(135deg, #e8a76a 0%, #cd7f32 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 0 15px rgba(205, 127, 50, 0.8));
+        }
+
+        .ranking-item:not(.rank-1):not(.rank-2):not(.rank-3) .rank-number {
+            color: #9ca3af;
+            filter: drop-shadow(0 0 8px rgba(156, 163, 175, 0.4));
+        }
+
+        .client-name {
+            flex: 1;
+            font-size: 2.8rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+        }
+
+        /* 4位以下のクライアント名を小さく */
+        .ranking-item:not(.rank-1):not(.rank-2):not(.rank-3) .client-name {
+            font-size: 1.6rem;
+            font-weight: 600;
+        }
+
+        .score {
+            font-size: 3.5rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, #00ff88 0%, #00d9ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            min-width: 200px;
+            text-align: right;
+            filter: drop-shadow(0 0 20px rgba(0, 255, 136, 0.6));
+            letter-spacing: 2px;
+        }
+
+        .rank-1 .score {
+            font-size: 4rem;
+            background: linear-gradient(135deg, #00ff88 0%, #7dff8e 50%, #00ff88 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: scoreGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes scoreGlow {
+            0%, 100% { filter: drop-shadow(0 0 20px rgba(0, 255, 136, 0.8)); }
+            50% { filter: drop-shadow(0 0 35px rgba(0, 255, 136, 1)); }
+        }
+
+        /* 4位以下のスコアを小さく */
+        .ranking-item:not(.rank-1):not(.rank-2):not(.rank-3) .score {
+            font-size: 2rem;
+            min-width: 120px;
+            filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.4));
+        }
+
+        /* 4位以下のスコアを小さく */
+        .ranking-item:not(.rank-1):not(.rank-2):not(.rank-3) .score {
+            font-size: 1.8rem;
+            min-width: 100px;
+        }
+
+        /* バン！演出用のクラス */
+        .ranking-item.bang {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) scale(2.5) !important;
+            z-index: 1000;
+            opacity: 1 !important;
+            width: 80%;
+            max-width: 1200px;
+            padding: 40px 50px !important;
+            box-shadow: 0 0 100px rgba(255, 215, 0, 0.8), 0 0 200px rgba(255, 215, 0, 0.5);
+            animation: bangEffect 1.2s ease-out forwards;
+            display: flex !important;
+            align-items: center !important;
+        }
+
+        /* バン！演出中の要素サイズ調整 */
+        .ranking-item.bang .rank-number {
+            font-size: 8rem !important;
+            width: 220px !important;
+            margin-right: 50px !important;
+        }
+
+        .ranking-item.bang .client-name {
+            font-size: 5rem !important;
+            flex: 1 !important;
+        }
+
+        .ranking-item.bang .score {
+            font-size: 6rem !important;
+            min-width: 350px !important;
+        }
+
+        @keyframes bangEffect {
+            0% {
+                transform: translate(-50%, -50%) scale(2);
+                opacity: 0;
+            }
+            20% {
+                transform: translate(-50%, -50%) scale(2.8);
+                opacity: 1;
+            }
+            50% {
+                transform: translate(-50%, -50%) scale(2.3);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(2.5);
+                opacity: 1;
+            }
+        }
+
+        /* 定位置へ移動するアニメーション */
+        @keyframes slideToPosition {
+            0% {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) scale(2.5);
+                opacity: 1;
+            }
+            100% {
+                position: relative;
+                top: 0;
+                left: 0;
+                transform: translate(0, 0) scale(1);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="round-title">ランキング発表</div>
+    </div>
+
+    <div class="ranking-container" id="rankingContainer">
+        <!-- ランキングアイテムが動的に追加される -->
+    </div>
+
+    <audio id="bgm" loop>
+        <source src="/sounds/BGM_001.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        const socket = io();
+        let rankingData = [];
+        let currentRound = 1;
+        let currentIndex = 0; // 現在表示しているランキングのインデックス
+        const bgm = document.getElementById('bgm');
+
+        // ランキングページとして登録（チーム別得点を要求）
+        socket.on('connect', () => {
+            console.log('サーバーに接続しました');
+            socket.emit('request-team-totals');
+        });
+
+        // チーム別得点データを受信（リアルタイム更新対応）
+        socket.on('team-totals', (data) => {
+            console.log('チーム別得点データ受信:', data);
+            
+            // データを得点順にソートしてランク付け（下位から表示するため逆順）
+            rankingData = data.teams
+                .sort((a, b) => a.score - b.score) // 昇順（下位から）
+                .map((team, index) => ({
+                    rank: data.teams.length - index, // 実際の順位
+                    name: `チーム${team.team}`,
+                    score: team.score
+                }));
+            
+            console.log('整形後のランキングデータ（下位から）:', rankingData);
+        });
+
+        // ラウンド変更を受信（チーム得点を再取得）
+        socket.on('round-changed', (round) => {
+            console.log('ラウンド変更を受信:', round);
+            currentRound = round;
+            socket.emit('request-team-totals');
+        });
+        
+        // フォント変更を受信
+        socket.on('font-changed', (data) => {
+            console.log('フォント変更受信:', data.fontFamily);
+            document.body.style.fontFamily = data.fontFamily;
+        });
+
+        // スコア更新時もチーム得点を再取得
+        socket.on('score-updated', () => {
+            console.log('スコア更新を検知');
+            socket.emit('request-team-totals');
+        });
+
+        // ランキング表示開始（BGMスタート）
+        socket.on('start-ranking-animation', () => {
+            console.log('ランキングGO! BGMスタート');
+            currentIndex = 0; // リセット
+            document.getElementById('rankingContainer').innerHTML = ''; // クリア
+            
+            // BGM再生
+            bgm.currentTime = 0;
+            bgm.play().catch(err => {
+                console.log('BGM自動再生エラー:', err);
+            });
+        });
+
+        // 次のランキングを表示
+        socket.on('show-next-ranking', () => {
+            console.log('次のランキングを表示:', currentIndex);
+            if (currentIndex < rankingData.length) {
+                showRankingItem(currentIndex);
+                currentIndex++;
+            } else {
+                console.log('全てのランキングを表示済み');
+            }
+        });
+
+        // ランキングリセット
+        socket.on('reset-ranking-list', () => {
+            console.log('ランキングリセット');
+            document.getElementById('rankingContainer').innerHTML = '';
+            currentIndex = 0;
+            
+            // BGM停止
+            bgm.pause();
+            bgm.currentTime = 0;
+        });
+
+        // 1つのランキングアイテムを表示
+        function showRankingItem(index) {
+            const container = document.getElementById('rankingContainer');
+            const item = rankingData[index];
+
+            if (!item) {
+                console.log('データなし');
+                return;
+            }
+
+            const rankItem = document.createElement('div');
+            rankItem.className = `ranking-item rank-${item.rank} bang`;
+            
+            rankItem.innerHTML = `
+                <div class="rank-number">${item.rank}</div>
+                <div class="client-name">${item.name}</div>
+                <div class="score">${item.score}点</div>
+            `;
+
+            // 画面全体に追加（バン！演出用）
+            document.body.appendChild(rankItem);
+
+            // 1.2秒後にバン！演出を終了し、定位置へ移動
+            setTimeout(() => {
+                // bodyから削除してコンテナに移動
+                document.body.removeChild(rankItem);
+                
+                // bangクラスを削除
+                rankItem.classList.remove('bang');
+                
+                // コンテナの最初に追加（下位から表示するため）
+                container.insertBefore(rankItem, container.firstChild);
+                
+                // showクラスを追加してフェードイン
+                setTimeout(() => {
+                    rankItem.classList.add('show');
+                }, 50);
+            }, 1200);
+        }
+
+        function showRankings() {
+            const container = document.getElementById('rankingContainer');
+            container.innerHTML = '';
+
+            if (rankingData.length === 0) {
+                container.innerHTML = '<p style="text-align: center; font-size: 2rem; margin-top: 100px;">データがありません</p>';
+                return;
+            }
+
+            // 下位から順番に表示（感謝祭風）
+            rankingData.reverse().forEach((item, index) => {
+                setTimeout(() => {
+                    const rankItem = document.createElement('div');
+                    rankItem.className = `ranking-item rank-${item.rank}`;
+                    
+                    rankItem.innerHTML = `
+                        <div class="rank-number">${item.rank}</div>
+                        <div class="client-name">${item.name}</div>
+                        <div class="score">${item.score}点</div>
+                    `;
+                    
+                    container.insertBefore(rankItem, container.firstChild);
+                    
+                    // アニメーション表示
+                    setTimeout(() => {
+                        rankItem.classList.add('show');
+                    }, 50);
+                }, index * 800); // 0.8秒間隔
+            });
+        }
+    </script>
+</body>
+</html>

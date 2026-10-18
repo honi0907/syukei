@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+    <title>集計システム ランチャー</title>
+    <link rel="stylesheet" href="../public/styles.css">
+    <link rel="stylesheet" href="launcher.css">
+</head>
+<body class="launcher-page">
+    <div class="launcher-card">
+        <header class="launcher-header">
+            <h1>集計システム</h1>
+            <p>親機・子機スコア集計（Electron版）</p>
+        </header>
+
+        <div class="launcher-columns">
+            <section class="launcher-panel">
+                <h2>サーバー</h2>
+                <div class="launcher-status-row">
+                    <span id="statusDot" class="launcher-status-dot stopped"></span>
+                    <span id="statusText">サーバー停止中</span>
+                </div>
+                <button type="button" id="startServerBtn" class="btn btn-primary btn-full launcher-start-btn">
+                    サーバーを起動
+                </button>
+                <button type="button" id="stopServerBtn" class="btn btn-secondary btn-full" disabled hidden>
+                    サーバーを停止
+                </button>
+            </section>
+
+            <section class="launcher-panel" id="openSection">
+                <h2>ウィンドウを開く</h2>
+                <div class="launcher-open-buttons">
+                    <button type="button" id="openParentBtn" class="btn btn-success btn-full" disabled>
+                        親機を開く
+                    </button>
+                    <button type="button" id="openScoreBtn" class="btn btn-danger btn-full" disabled>
+                        親機点数画面を開く
+                    </button>
+                    <button type="button" id="openScoreFullscreenBtn" class="btn btn-warning btn-full" disabled>
+                        親機点数画面（フルスクリーン）
+                    </button>
+                </div>
+                <p class="launcher-note">点数画面＝得点発表（/ranking）。設定は親機の「設定…」から。</p>
+            </section>
+        </div>
+
+        <section id="addressSection" class="launcher-address-section" hidden>
+            <h2>接続アドレス</h2>
+            <p class="launcher-hint">別端末からは LAN の URL をブラウザで開いてください。</p>
+            <div class="launcher-address-columns">
+                <div class="address-block">
+                    <h3>親機（操作画面）</h3>
+                    <div class="address-line">
+                        <span class="address-label">このPC</span>
+                        <code id="parentLocalUrl">—</code>
+                    </div>
+                    <div class="address-line">
+                        <span class="address-label">LAN</span>
+                        <code id="parentLanUrl">—</code>
+                    </div>
+                </div>
+                <div class="address-block">
+                    <h3>子機（点数入力）</h3>
+                    <div class="address-line">
+                        <span class="address-label">このPC</span>
+                        <code id="clientLocalUrl">—</code>
+                    </div>
+                    <div class="address-line">
+                        <span class="address-label">LAN</span>
+                        <code id="clientLanUrl">—</code>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+    <script src="launcher.js"></script>
+</body>
+</html>

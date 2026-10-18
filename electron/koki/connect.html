@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>集計システム 子機</title>
+    <link rel="stylesheet" href="../../public/styles.css">
+    <style>
+        body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #eef2f7; padding: 20px; box-sizing: border-box; }
+        .card { width: 100%; max-width: 420px; background: #fff; border-radius: 12px; padding: 24px; border: 1px solid #e1e4e8; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        h1 { margin: 0 0 8px; font-size: 1.35rem; color: #2c3e50; }
+        p { margin: 0 0 20px; color: #6c757d; font-size: 0.9rem; line-height: 1.5; }
+        label { display: block; margin-bottom: 8px; font-weight: 500; color: #495057; }
+        input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 2px solid #dee2e6; border-radius: 8px; font-size: 1rem; margin-bottom: 12px; }
+        .btn-row { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+        .version { margin-top: 16px; font-size: 0.78rem; color: #868e96; text-align: center; }
+        #status { min-height: 1.2em; font-size: 0.85rem; color: #dc3545; margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>子機接続</h1>
+        <p>親機PCのIPアドレス（例: 192.168.1.10）または <code>localhost</code> を入力してください。</p>
+        <div id="status"></div>
+        <label for="host">親機サーバーアドレス</label>
+        <input type="text" id="host" placeholder="localhost" autocomplete="off">
+        <div class="btn-row">
+            <button type="button" class="btn btn-primary btn-full" id="connectBtn">接続して開始</button>
+            <button type="button" class="btn btn-warning btn-full" id="connectFsBtn">フルスクリーンで接続</button>
+        </div>
+        <div class="version" id="versionLine">バージョン —</div>
+    </div>
+    <script>
+        const hostInput = document.getElementById('host');
+        const statusEl = document.getElementById('status');
+        const connectBtn = document.getElementById('connectBtn');
+        const connectFsBtn = document.getElementById('connectFsBtn');
+
+        async function init() {
+            hostInput.value = await window.kokiAPI.getDefaultHost();
+            const info = await window.kokiAPI.getAppVersion();
+            document.getElementById('versionLine').textContent =
+                `集計システム 子機 v${info.version}`;
+        }
+
+        async function connect(fullscreen) {
+            statusEl.textContent = '';
+            connectBtn.disabled = true;
+            connectFsBtn.disabled = true;
+            const result = await window.kokiAPI.connect(hostInput.value, fullscreen);
+            connectBtn.disabled = false;
+            connectFsBtn.disabled = false;
+            if (!result.ok) {
+                statusEl.textContent = result.error || '接続に失敗しました。';
+            }
+        }
+
+        connectBtn.addEventListener('click', () => connect(false));
+        connectFsBtn.addEventListener('click', () => connect(true));
+        init();
+    </script>
+</body>
+</html>

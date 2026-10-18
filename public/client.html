@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>子機 - 点数入力</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="client-page">
+    <!-- ログイン画面 -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <h1>子機 初期設定</h1>
+            <div class="login-form">
+                <label for="clientName">子機名</label>
+                <input type="text" id="clientName" placeholder="例: 子機1" value="子機1">
+                
+                <label for="serverHost">サーバーアドレス</label>
+                <input type="text" id="serverHost" placeholder="例: localhost" value="localhost">
+                
+                <button class="btn btn-primary btn-large" onclick="login()">
+                    接続して開始
+                </button>
+                
+                <div id="loginStatus" class="status-message"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 入力画面 -->
+    <div id="inputScreen" class="input-screen" style="display: none;">
+        <header class="header">
+            <h1 id="clientNameDisplay">子機</h1>
+            <div class="header-info">
+                <div class="round-display">
+                    現在: <span id="currentRoundDisplay">チームA</span>
+                </div>
+                <div id="connectionStatus" class="connection-status">
+                    <span class="status-dot"></span>
+                    <span>接続済</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-container">
+            <!-- 左側: 送信履歴 -->
+            <div class="left-panel">
+                <div class="history-card-compact">
+                    <h3>送信履歴</h3>
+                    <div id="historyList" class="history-list-compact">
+                        <p class="no-history">まだ送信していません</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 中央: テンキー -->
+            <div class="center-panel" id="centerPanel">
+                <!-- ロック状態バー -->
+                <div id="lockStatusBar" class="lock-status-bar unlocked">
+                    <span id="lockStatusText">入力可能</span>
+                </div>
+
+                <!-- ボタングリッド -->
+                <div class="numpad" id="numpad">
+                    <button class="num-btn" data-number="7" onclick="addNumber(7)">7</button>
+                    <button class="num-btn" data-number="8" onclick="addNumber(8)">8</button>
+                    <button class="num-btn" data-number="9" onclick="addNumber(9)">9</button>
+                    <button class="num-btn" data-number="4" onclick="addNumber(4)">4</button>
+                    <button class="num-btn" data-number="5" onclick="addNumber(5)">5</button>
+                    <button class="num-btn" data-number="6" onclick="addNumber(6)">6</button>
+                    <button class="num-btn" data-number="1" onclick="addNumber(1)">1</button>
+                    <button class="num-btn" data-number="2" onclick="addNumber(2)">2</button>
+                    <button class="num-btn" data-number="3" onclick="addNumber(3)">3</button>
+                    <button class="num-btn clear" onclick="clearScore()">クリア</button>
+                    <button class="num-btn" data-number="0" onclick="addNumber(0)">0</button>
+                    <button class="num-btn submit" onclick="submitScore()">決定</button>
+                </div>
+            </div>
+
+            <!-- 右側: 入力点数 -->
+            <div class="right-panel">
+                <div class="score-display-card">
+                    <h2>入力点数</h2>
+                    <div class="current-score" id="currentScore">0</div>
+                    <p class="guide-text">数字を入力して「決定」を押してください</p>
+                    <p class="warning-text" id="warningText">※ 20点までしか入力できません</p>
+                </div>
+                <button class="btn btn-unlock-request" id="unlockRequestBtn" onclick="requestUnlock()" style="display: none;">
+                    打ち直し申請
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let socket;
+        let clientName = '';
+        let currentScore = 0;
+        let isLocked = false;
+        let unlockRequested = false;
+        let currentRound = 1;
+        let teamNames = ['A', 'B', 'C', 'D', 'E', 'F']; // デフォルト
+        let roundHistory = {
+            1: null, 2: null, 3: null, 4: null, 5: null
+        }; // チーム別履歴(各チーム最新1件のみ)
+        let testMode = false; // デバッグモード（子機名がtestの場合true）
+
+        let clickCount = 0;
+        let clickTimer = null;
+
+        // ページ読み込み時に保存された値を復元
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedClientName = localStorage.getItem('clientName');
+            const savedServerHost = localStorage.getItem('serverHost');
+            
+            if (savedClientName) {
+                document.getElementById('clientName').value = savedClientName;
+            }
+            if (savedServerHost) {
+                document.getElementById('serverHost').value = savedServerHost;
+            }
+        });
+
+        function login() {
+            const name = document.getElementById('clientName').value.trim();
+            const host = document.getElementById('serverHost').value.trim();
+            
+            if (!name) {
+                showLoginStatus('子機名を入力してください', 'error');
+                return;
+            }
+
+            showLoginStatus('接続中...', 'info');
+            clientName = name;
+            
+            // 子機名が"test"の場合はデバッグモード
+            testMode = (name.toLowerCase() === 'test');
+            if (testMode) {
+                console.log('🔓 デバッグモード: 点数制限解除');
+            }
+
+            // ローカルストレージに保存
+            localStorage.setItem('clientName', name);
+            localStorage.setItem('serverHost', host);
+
+            // Socket.io接続
+            socket = io(`http://${host}:5555`);
+
+            socket.on('connect', () => {
+                socket.emit('register', { clientName: name });
+                showLoginStatus('接続成功', 'success');
+                
+                // チーム名をリクエスト
+                socket.emit('request-team-names');
+                
+                setTimeout(() => {
+                    document.getElementById('loginScreen').style.display = 'none';
+                    document.getElementById('inputScreen').style.display = 'block';
+                    const nameDisplay = document.getElementById('clientNameDisplay');
+                    nameDisplay.textContent = name;
+                    
+                    // testモードの場合は警告文を変更
+                    if (testMode) {
+                        const warningText = document.getElementById('warningText');
+                        warningText.textContent = '🔓 デバッグモード: 999点まで入力可能';
+                        warningText.style.color = '#e74c3c';
+                    }
+                    
+                    // 自動的にフルスクリーンモードに入る
+                    enterFullscreen();
+                    
+                    // 名前表示に3回クリックでフルスクリーン解除機能を追加
+                    nameDisplay.style.cursor = 'pointer';
+                    nameDisplay.addEventListener('click', handleNameClick);
+                    
+                    // 初期表示として履歴を表示
+                    updateHistoryDisplay();
+                }, 1000);
+            });
+
+            socket.on('connect_error', () => {
+                showLoginStatus('✗ 接続失敗: サーバーに接続できません', 'error');
+            });
+            
+            // チーム名を受信
+            socket.on('team-names', (data) => {
+                teamNames = data.teamNames;
+                console.log('チーム名受信:', teamNames);
+                updateCurrentRoundDisplay();
+                updateHistoryDisplay();
+            });
+
+            socket.on('lock-status', (data) => {
+                setLockStatus(data.locked);
+            });
+
+            socket.on('score-submitted', (data) => {
+                // 履歴を上書き(ラウンド別、最新1件のみ)
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+                roundHistory[currentRound] = {
+                    time: timeStr,
+                    score: data.score,
+                    round: currentRound
+                };
+                updateHistoryDisplay();
+                
+                currentScore = 0;
+                updateScoreDisplay();
+                updateButtonStates();
+                
+                // 送信完了メッセージを表示
+                const bar = document.getElementById('lockStatusBar');
+                const text = document.getElementById('lockStatusText');
+                bar.className = 'lock-status-bar locked';
+                text.textContent = `${data.score}点を送信しました`;
+                
+                // 1.5秒後にロック中表示に戻す
+                setTimeout(() => {
+                    text.textContent = 'ロック中 - 親機で解除してください';
+                }, 1500);
+                
+                // 送信後は自動ロックされ、打ち直し申請ボタンを表示
+                document.getElementById('unlockRequestBtn').style.display = 'block';
+                unlockRequested = false;
+            });
+
+            socket.on('error', (data) => {
+                showError(data.message);
+            });
+
+            // ラウンド変更を受信
+            socket.on('round-changed', (round) => {
+                currentRound = round;
+                updateCurrentRoundDisplay();
+                
+                // ラウンド切り替え時に入力点数をリセット
+                currentScore = 0;
+                updateScoreDisplay();
+                updateHistoryDisplay();
+            });
+        }
+        
+        function updateCurrentRoundDisplay() {
+            const label = teamNames[currentRound - 1];
+            document.getElementById('currentRoundDisplay').textContent = label;
+        }
+
+        function showLoginStatus(message, type) {
+            const status = document.getElementById('loginStatus');
+            status.textContent = message;
+            status.className = `status-message ${type}`;
+        }
+
+        function handleNameClick() {
+            clickCount++;
+            
+            // 既存のタイマーをクリア
+            if (clickTimer) {
+                clearTimeout(clickTimer);
+            }
+            
+            // 3回クリックでフルスクリーンのトグル（切り替え）
+            if (clickCount === 3) {
+                // 現在フルスクリーンかどうかをチェック
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    exitFullscreen();
+                } else {
+                    enterFullscreen();
+                }
+                clickCount = 0;
+            } else {
+                // 1秒以内に3回クリックしないとリセット
+                clickTimer = setTimeout(() => {
+                    clickCount = 0;
+                }, 1000);
+            }
+        }
+
+        function enterFullscreen() {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) {
+                elem.msRequestFullscreen();
+            }
+        }
+
+        function exitFullscreen() {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        }
+
+        function addNumber(num) {
+            if (isLocked) return;
+            
+            const newScore = currentScore * 10 + num;
+            
+            // testモードでない場合のみ20点制限
+            if (!testMode && newScore > 20) {
+                showError('20点を超えることはできません');
+                return;
+            }
+            
+            // testモードの場合は999点まで許可
+            if (testMode && newScore > 999) {
+                showError('999点を超えることはできません');
+                return;
+            }
+            
+            currentScore = newScore;
+            updateScoreDisplay();
+            updateButtonStates();
+        }
+
+        function clearScore() {
+            if (isLocked) return;
+            currentScore = 0;
+            updateScoreDisplay();
+            updateButtonStates();
+        }
+
+        function submitScore() {
+            if (isLocked) {
+                showError('ロック中です');
+                return;
+            }
+
+            if (currentScore === 0) {
+                showError('0点は送信できません');
+                return;
+            }
+
+            socket.emit('submit-score', {
+                clientName,
+                score: currentScore
+            });
+        }
+
+        function requestUnlock() {
+            if (!unlockRequested) {
+                socket.emit('request-unlock', { clientName });
+                unlockRequested = true;
+                const centerPanel = document.getElementById('centerPanel');
+                const bar = document.getElementById('lockStatusBar');
+                const text = document.getElementById('lockStatusText');
+                
+                centerPanel.className = 'center-panel requesting';
+                bar.className = 'lock-status-bar requesting';
+                text.textContent = '解除申請を送信しました';
+                
+                // 1.5秒後に「申請中」表示に変更
+                setTimeout(() => {
+                    text.textContent = '申請中 - 親機の承認待ち';
+                }, 1500);
+            }
+        }
+
+        function updateScoreDisplay() {
+            document.getElementById('currentScore').textContent = currentScore;
+        }
+
+        function updateButtonStates() {
+            const buttons = document.querySelectorAll('.num-btn[data-number]');
+            
+            // testモードの場合はボタン制限なし（999点まで）
+            if (testMode) {
+                if (currentScore >= 100) {
+                    // 3桁入力済み: 全て無効
+                    buttons.forEach(btn => {
+                        btn.classList.add('disabled-btn');
+                        btn.disabled = true;
+                    });
+                } else {
+                    // 999点以下: 全て有効
+                    buttons.forEach(btn => {
+                        btn.classList.remove('disabled-btn');
+                        btn.disabled = false;
+                    });
+                }
+                return;
+            }
+            
+            // 通常モード: 20点制限
+            if (currentScore === 0) {
+                // 初期状態: 全てのボタン有効
+                buttons.forEach(btn => {
+                    btn.classList.remove('disabled-btn');
+                    btn.disabled = false;
+                });
+            } else if (currentScore === 1) {
+                // 1が入力済み: 0-9まで全て有効（1+0〜1+9で最大19点）
+                buttons.forEach(btn => {
+                    btn.classList.remove('disabled-btn');
+                    btn.disabled = false;
+                });
+            } else if (currentScore === 2) {
+                // 2が入力済み: 0のみ有効（2+0で20点）、1-9は無効
+                buttons.forEach(btn => {
+                    const num = parseInt(btn.dataset.number);
+                    if (num === 0) {
+                        btn.classList.remove('disabled-btn');
+                        btn.disabled = false;
+                    } else {
+                        btn.classList.add('disabled-btn');
+                        btn.disabled = true;
+                    }
+                });
+            } else if (currentScore >= 3 && currentScore <= 9) {
+                // 3-9が入力済み: 全て無効（どれを押しても20点超える）
+                buttons.forEach(btn => {
+                    btn.classList.add('disabled-btn');
+                    btn.disabled = true;
+                });
+            } else if (currentScore >= 10) {
+                // 2桁の場合: 全て無効
+                buttons.forEach(btn => {
+                    btn.classList.add('disabled-btn');
+                    btn.disabled = true;
+                });
+            }
+        }
+
+        function setLockStatus(locked) {
+            isLocked = locked;
+            const bar = document.getElementById('lockStatusBar');
+            const text = document.getElementById('lockStatusText');
+            const buttons = document.querySelectorAll('.num-btn');
+            const centerPanel = document.getElementById('centerPanel');
+
+            if (locked) {
+                // 申請中でない場合のみロック表示に変更
+                if (!unlockRequested) {
+                    bar.className = 'lock-status-bar locked';
+                    text.textContent = 'ロック中 - 親機で解除してください';
+                    centerPanel.className = 'center-panel locked';
+                }
+                buttons.forEach(btn => btn.disabled = true);
+            } else {
+                bar.className = 'lock-status-bar unlocked';
+                text.textContent = '入力可能';
+                buttons.forEach(btn => btn.disabled = false);
+                updateButtonStates(); // ロック解除時にボタン状態を更新
+                centerPanel.className = 'center-panel unlocked';
+                
+                // ロック解除時は打ち直し申請ボタンを非表示
+                document.getElementById('unlockRequestBtn').style.display = 'none';
+                unlockRequested = false;
+            }
+        }
+
+        function updateHistoryDisplay() {
+            const historyList = document.getElementById('historyList');
+            
+            // 全チームの履歴を表示
+            let html = '';
+            
+            for (let r = 1; r <= 6; r++) {
+                const roundData = roundHistory[r];
+                const roundTotal = roundData ? roundData.score : 0;
+                const teamLabel = teamNames[r - 1];
+                
+                // チームごとのセクション（常に表示）
+                html += `
+                    <div class="round-history-section ${r === currentRound ? 'current-round' : ''}">
+                        <div class="round-total">${teamLabel}: ${roundTotal}点</div>
+                    </div>
+                `;
+            }
+            
+            // 常に履歴を表示
+            historyList.innerHTML = html;
+        }
+
+        function addToHistory(score) {
+            // この関数は削除（updateHistoryDisplayに統合）
+        }
+
+        function showSuccess(message) {
+            const bar = document.getElementById('lockStatusBar');
+            const text = document.getElementById('lockStatusText');
+            
+            bar.className = 'lock-status-bar success';
+            text.textContent = message;
+            
+            setTimeout(() => {
+                setLockStatus(true);
+            }, 1500);
+        }
+
+        function showError(message) {
+            const bar = document.getElementById('lockStatusBar');
+            const text = document.getElementById('lockStatusText');
+            const originalClass = bar.className;
+            const originalText = text.textContent;
+            
+            bar.className = 'lock-status-bar error';
+            text.textContent = message;
+            
+            setTimeout(() => {
+                bar.className = originalClass;
+                text.textContent = originalText;
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

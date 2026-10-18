@@ -1,0 +1,1854 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>得点発表</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0 !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000000 !important;
+        }
+
+        body {
+            font-family: 'Orbitron', monospace !important;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image: url('/gazou/bg_01.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
+        /* Good/Excellent画像オーバーレイ - コンテナ */
+        .overlay-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            opacity: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .overlay-container.show {
+            opacity: 1;
+        }
+
+        /* 静止画像（中央部分） */
+        .overlay-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0;
+            transition: opacity 0.3s ease-in;
+        }
+        
+        .overlay-image.show {
+            opacity: 1;
+        }
+        
+        /* 上部の帯アニメーション（右から左に1回だけ） */
+        @keyframes slideRight {
+            0% {
+                transform: translateX(100%);
+            }
+            100% {
+                transform: translateX(0);
+            }
+        }
+        
+        /* 下部の帯アニメーション（左から右に1回だけ） */
+        @keyframes slideLeft {
+            0% {
+                transform: translateX(-100%);
+            }
+            100% {
+                transform: translateX(0);
+            }
+        }
+        
+        /* 上部帯 */
+        .top-band {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 100%;
+            height: auto;
+            transform: translateX(100%);
+            line-height: 0;
+            font-size: 0;
+            overflow: hidden;
+        }
+        
+        .top-band.animate {
+            animation: slideRight 0.7s ease-out forwards;
+        }
+        
+        .top-band img {
+            display: block;
+            width: 100%;
+            height: auto;
+            margin: 0;
+            padding: 0;
+            border: 0;
+        }
+        
+        /* 下部帯 */
+        .bottom-band {
+            position: fixed;
+            bottom: -10px;
+            left: 0;
+            width: 100%;
+            height: auto;
+            transform: translateX(-100%);
+            line-height: 0;
+            font-size: 0;
+            overflow: hidden;
+        }
+        
+        .bottom-band.animate {
+            animation: slideLeft 0.7s ease-out forwards;
+        }
+        
+        /* 帯キラキラエフェクト */
+        .top-band.sparkle::after,
+        .bottom-band.sparkle::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0) 20%,
+                rgba(255, 255, 255, 0.8) 50%,
+                rgba(255, 255, 255, 0) 80%,
+                transparent 100%
+            );
+            animation: sparkle-shine 2s ease-in-out infinite;
+            pointer-events: none;
+        }
+        
+        @keyframes sparkle-shine {
+            0% {
+                left: -100%;
+            }
+            100% {
+                left: 200%;
+            }
+        }
+        
+        .bottom-band img {
+            display: block;
+            width: 100%;
+            height: auto;
+            margin: 0;
+            padding: 0;
+            border: 0;
+        }
+
+        /* 会社名表示 */
+        .company-name {
+            position: fixed;
+            top: var(--company-name-position, 20%);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            opacity: 1;
+            transition: opacity 0.3s ease-in;
+            text-align: center;
+        }
+        
+        .company-name canvas {
+            display: block;
+            margin: 0 auto;
+        }
+
+        .company-name.show {
+            opacity: 1;
+        }
+
+        .company-name.hide {
+            opacity: 0;
+        }
+
+        .font-selector {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            background: rgba(20, 20, 20, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #ff0000;
+            max-height: 90vh;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .font-selector::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .font-selector::-webkit-scrollbar-track {
+            background: #000000;
+        }
+
+        .font-selector::-webkit-scrollbar-thumb {
+            background: #ff0000;
+            border-radius: 4px;
+        }
+
+        .font-selector label {
+            color: #ffffff;
+            font-size: 0.9rem;
+            display: block;
+            margin-bottom: 8px;
+            font-family: 'Orbitron', monospace;
+        }
+
+        .font-selector select {
+            width: 250px;
+            padding: 8px;
+            font-size: 1rem;
+            background: #000000;
+            color: #ff0000;
+            border: 1px solid #ff0000;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Orbitron', monospace;
+            max-height: 400px;
+        }
+
+        .font-selector select:focus {
+            outline: none;
+            border-color: #ff3333;
+        }
+
+        .container {
+            position: fixed;
+            top: var(--score-top, 50%);
+            left: var(--score-left, 50%);
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            gap: var(--digit-gap, 15px);
+            z-index: 5;
+        }
+
+        .score-display {
+            display: flex;
+            align-items: flex-end;
+            gap: var(--digit-gap, 15px);
+        }
+
+        .digit-container {
+            display: inline-block;
+            overflow: hidden;
+            height: calc(var(--digit-size, 18rem) * 0.95);
+            width: calc(var(--digit-size, 18rem) * 0.61);
+            position: relative;
+            background: transparent;
+            clip-path: inset(10% 0 10% 0);
+        }
+
+        .digit-roller {
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.05s linear;
+        }
+
+        .digit {
+            font-size: var(--digit-size, 18rem) !important;
+            font-weight: 700 !important;
+            line-height: 1 !important;
+            font-family: var(--digit-font, 'Poppins'), sans-serif !important;
+            font-variant-numeric: tabular-nums !important;
+            height: var(--digit-size, 18rem);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            letter-spacing: -0.05em;
+            color: transparent !important;
+            position: relative;
+        }
+        
+        .digit canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .unit {
+            font-size: 3.5rem !important;
+            font-weight: 600 !important;
+            font-family: var(--digit-font, 'Orbitron'), monospace !important;
+            padding-bottom: 0.5rem;
+            align-self: flex-end;
+            color: #002856 !important;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .start-button {
+            display: none;
+        }
+        
+        /* 紙吹雪アニメーション */
+        .confetti-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+            overflow: hidden;
+            visibility: hidden;
+        }
+        
+        .confetti-container.active {
+            visibility: visible;
+        }
+        
+        .confetti {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: #ffd700;
+            top: -100px;
+            animation: confetti-fall 3s linear forwards;
+        }
+        
+        @keyframes confetti-fall {
+            0% {
+                transform: translateY(0) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(calc(100vh + 100px)) rotate(720deg);
+                opacity: 0;
+            }
+        }
+        
+        /* 光の爆発アニメーション */
+        .burst-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+            z-index: 99;
+        }
+        
+        .burst-ray {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 200px;
+            background: linear-gradient(to bottom, rgba(255, 215, 0, 1), rgba(255, 215, 0, 0));
+            transform-origin: top center;
+            animation: burst-expand 1s ease-out forwards;
+        }
+        
+        @keyframes burst-expand {
+            0% {
+                height: 0;
+                opacity: 1;
+            }
+            50% {
+                height: 300px;
+                opacity: 1;
+            }
+            100% {
+                height: 400px;
+                opacity: 0;
+            }
+        }
+        
+        .flash-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255, 215, 0, 0.8), transparent 70%);
+            pointer-events: none;
+            z-index: 98;
+            animation: flash 0.5s ease-out forwards;
+        }
+        
+        @keyframes flash {
+            0% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+            }
+        }
+        
+        /* 星の輝きアニメーション */
+        .stars-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 99;
+        }
+        
+        .star {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: gold;
+            clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+            animation: star-twinkle 2s ease-in-out forwards;
+        }
+        
+        @keyframes star-twinkle {
+            0% {
+                transform: scale(0) rotate(0deg);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.5) rotate(180deg);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(0) rotate(360deg);
+                opacity: 0;
+            }
+        }
+        
+        /* 虹の波アニメーション */
+        .rainbow-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 99;
+            overflow: hidden;
+        }
+        
+        .rainbow-wave {
+            position: absolute;
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(90deg, 
+                rgba(255,0,0,0.7) 0%, 
+                rgba(255,154,0,0.7) 10%, 
+                rgba(208,222,33,0.7) 20%, 
+                rgba(79,220,74,0.7) 30%, 
+                rgba(63,218,216,0.7) 40%, 
+                rgba(47,201,226,0.7) 50%, 
+                rgba(28,127,238,0.7) 60%, 
+                rgba(95,21,242,0.7) 70%, 
+                rgba(186,12,248,0.7) 80%, 
+                rgba(251,7,217,0.7) 90%, 
+                rgba(255,0,0,0.7) 100%);
+            animation: rainbow-wave-move 2s ease-out forwards;
+        }
+        
+        @keyframes rainbow-wave-move {
+            0% {
+                top: -200px;
+                opacity: 0;
+            }
+            20% {
+                opacity: 1;
+            }
+            80% {
+                opacity: 1;
+            }
+            100% {
+                top: 100%;
+                opacity: 0;
+            }
+        }
+        
+        /* 花火アニメーション */
+        .fireworks-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 99;
+        }
+        
+        .firework {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: firework-explode 1.5s ease-out forwards;
+        }
+        
+        @keyframes firework-explode {
+            0% {
+                transform: translate(0, 0);
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+            }
+        }
+        
+        /* ハートアニメーション */
+        .hearts-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 99;
+            overflow: hidden;
+        }
+        
+        .heart {
+            position: absolute;
+            font-size: 30px;
+            animation: heart-float 3s ease-in forwards;
+        }
+        
+        @keyframes heart-float {
+            0% {
+                transform: translateY(100vh) rotate(0deg) scale(1);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-20vh) rotate(360deg) scale(1.5);
+                opacity: 0;
+            }
+        }
+        
+        /* 稲妻アニメーション */
+        .lightning-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 99;
+        }
+        
+        .lightning {
+            position: absolute;
+            width: 3px;
+            background: linear-gradient(to bottom, #fff, #ffff00, #fff);
+            box-shadow: 0 0 10px #fff, 0 0 20px #ffff00;
+            animation: lightning-strike 0.3s ease-out forwards;
+        }
+        
+        @keyframes lightning-strike {
+            0% {
+                opacity: 0;
+                height: 0;
+            }
+            50% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+                height: 100%;
+            }
+        }
+        
+        .lightning-flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            pointer-events: none;
+            z-index: 98;
+            animation: flash-quick 0.1s ease-out forwards;
+        }
+        
+        @keyframes flash-quick {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+        
+        /* キラキラ粒子アニメーション */
+        .sparkles-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 99;
+        }
+        
+        .sparkle {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: radial-gradient(circle, #fff, transparent);
+            border-radius: 50%;
+            box-shadow: 0 0 10px #fff;
+            animation: sparkle-rise 2.5s ease-out forwards;
+        }
+        
+        @keyframes sparkle-rise {
+            0% {
+                transform: translateY(20px) scale(0);
+                opacity: 0;
+            }
+            20% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-100vh) scale(1);
+                opacity: 0;
+            }
+        }
+        
+        /* スポットライトアニメーション */
+        .spotlight-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 99;
+            background: rgba(0, 0, 0, 0.7);
+            animation: spotlight-fade 3s ease-out forwards;
+        }
+        
+        .spotlight {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(255, 255, 200, 0.8), transparent 70%);
+            border-radius: 50%;
+            animation: spotlight-rotate 3s linear forwards;
+        }
+        
+        @keyframes spotlight-rotate {
+            0% {
+                transform: translate(-50%, -50%) scale(0.5);
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(2) rotate(720deg);
+            }
+        }
+        
+        @keyframes spotlight-fade {
+            0% {
+                opacity: 0;
+            }
+            20% {
+                opacity: 1;
+            }
+            80% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+            }
+        }
+        
+        /* パルス波アニメーション */
+        .pulse-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+            z-index: 99;
+        }
+        
+        .pulse-wave {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100px;
+            height: 100px;
+            border: 4px solid #00ffff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            animation: pulse-expand 2s ease-out forwards;
+        }
+        
+        @keyframes pulse-expand {
+            0% {
+                width: 100px;
+                height: 100px;
+                opacity: 1;
+            }
+            100% {
+                width: 1000px;
+                height: 1000px;
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 紙吹雪コンテナ -->
+    <div id="confettiContainer" class="confetti-container"></div>
+    
+    <!-- 光の爆発コンテナ -->
+    <div id="burstContainer" class="burst-container"></div>
+    
+    <!-- 星の輝きコンテナ -->
+    <div id="starsContainer" class="stars-container"></div>
+    
+    <!-- 虹の波コンテナ -->
+    <div id="rainbowContainer" class="rainbow-container"></div>
+    
+    <!-- 花火コンテナ -->
+    <div id="fireworksContainer" class="fireworks-container"></div>
+    
+    <!-- ハートコンテナ -->
+    <div id="heartsContainer" class="hearts-container"></div>
+    
+    <!-- 稲妻コンテナ -->
+    <div id="lightningContainer" class="lightning-container"></div>
+    
+    <!-- キラキラ粒子コンテナ -->
+    <div id="sparklesContainer" class="sparkles-container"></div>
+    
+    <!-- スポットライトコンテナ -->
+    <div id="spotlightContainer" class="spotlight-container" style="display: none;"></div>
+    
+    <!-- パルス波コンテナ -->
+    <div id="pulseContainer" class="pulse-container"></div>
+    
+    <!-- Good/Excellent オーバーレイコンテナ -->
+    <div id="overlayContainer" class="overlay-container">
+        <img id="overlayImage" class="overlay-image" src="" alt="">
+        <div class="top-band">
+            <img id="topBandImg" src="" alt="">
+        </div>
+        <div class="bottom-band">
+            <img id="bottomBandImg" src="" alt="">
+        </div>
+    </div>
+    
+    <!-- 会社名表示 -->
+    <div id="companyName" class="company-name"></div>
+
+    <div class="container">
+        <div class="score-display">
+            <div class="digit-container">
+                <div class="digit-roller" id="digit1">
+                    <div class="digit">0</div>
+                    <div class="digit">1</div>
+                    <div class="digit">2</div>
+                    <div class="digit">3</div>
+                    <div class="digit">4</div>
+                    <div class="digit">5</div>
+                    <div class="digit">6</div>
+                    <div class="digit">7</div>
+                    <div class="digit">8</div>
+                    <div class="digit">9</div>
+                    <div class="digit">0</div>
+                    <div class="digit">1</div>
+                    <div class="digit">2</div>
+                    <div class="digit">3</div>
+                    <div class="digit">4</div>
+                    <div class="digit">5</div>
+                    <div class="digit">6</div>
+                    <div class="digit">7</div>
+                    <div class="digit">8</div>
+                    <div class="digit">9</div>
+                </div>
+            </div>
+            <div class="digit-container">
+                <div class="digit-roller" id="digit0">
+                    <div class="digit">0</div>
+                    <div class="digit">1</div>
+                    <div class="digit">2</div>
+                    <div class="digit">3</div>
+                    <div class="digit">4</div>
+                    <div class="digit">5</div>
+                    <div class="digit">6</div>
+                    <div class="digit">7</div>
+                    <div class="digit">8</div>
+                    <div class="digit">9</div>
+                    <div class="digit">0</div>
+                    <div class="digit">1</div>
+                    <div class="digit">2</div>
+                    <div class="digit">3</div>
+                    <div class="digit">4</div>
+                    <div class="digit">5</div>
+                    <div class="digit">6</div>
+                    <div class="digit">7</div>
+                    <div class="digit">8</div>
+                    <div class="digit">9</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <audio id="soundNo1" preload="auto">
+        <source src="/sounds/No1.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="soundNo2_11sec" preload="auto">
+        <source src="/sounds/No2.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="soundNo3" preload="auto">
+        <source src="/sounds/No3.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="soundNo4" preload="auto">
+        <source src="/sounds/No4.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="soundExcellent" preload="auto">
+        <source src="/sounds/Excellent.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="soundGood" preload="auto">
+        <source src="/sounds/Good.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        const socket = io();
+        let totalScore = 0;
+        let animationRunning = false;
+        let currentClientName = '';
+        let teamNames = ['A', 'B', 'C', 'D', 'E', 'F']; // デフォルト
+        let currentTeamName = ''; // 現在表示中のチーム名
+        let perfectEffect = 'none';
+        
+        // Canvas + JavaScriptで数字を描画
+        function drawDigitOnCanvas(canvas, digit) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // キャンバスをクリア
+            ctx.clearRect(0, 0, width, height);
+            
+            // 右上から左下への斜めグラデーション（数字用設定値を使用）
+            const gradient = ctx.createLinearGradient(width * 0.9, height * 0.1, width * 0.1, height * 0.9);
+            gradient.addColorStop(0, digitGradientColors.color1);
+            gradient.addColorStop(0.5, digitGradientColors.color2);
+            gradient.addColorStop(1, digitGradientColors.color3);
+            
+            // 影を設定（数字用設定値を使用）
+            const opacity = digitShadowOpacity / 100;
+            ctx.shadowColor = `rgba(30, 90, 158, ${opacity})`;
+            ctx.shadowBlur = digitShadowBlur;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 3;
+            
+            // フォント設定
+            ctx.font = `bold ${height * 0.8}px Poppins, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // 縁（アウトライン）を描画
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.lineWidth = 4;
+            ctx.lineJoin = 'round';
+            ctx.strokeText(digit, width / 2, height / 2);
+            
+            // 数字を描画（塗りつぶし）
+            ctx.fillStyle = gradient;
+            ctx.fillText(digit, width / 2, height / 2);
+        }
+        
+        // 会社名をCanvasで描画
+        function drawCompanyNameOnCanvas(canvas, text) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // キャンバスをクリア
+            ctx.clearRect(0, 0, width, height);
+            
+            // 右上から左下への斜めグラデーション（チーム名用）
+            const gradient = ctx.createLinearGradient(width * 0.9, height * 0.1, width * 0.1, height * 0.9);
+            gradient.addColorStop(0, companyGradientColors.color1);
+            gradient.addColorStop(0.5, companyGradientColors.color2);
+            gradient.addColorStop(1, companyGradientColors.color3);
+            
+            // 影を設定（チーム名用）
+            const opacity = companyShadowOpacity / 100;
+            ctx.shadowColor = `rgba(30, 90, 158, ${opacity})`;
+            ctx.shadowBlur = companyShadowBlur;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 3;
+            
+            // フォント設定
+            ctx.font = `bold 80px Poppins, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // テキストを描画（塗りつぶし）
+            ctx.fillStyle = gradient;
+            ctx.fillText(text, width / 2, height / 2);
+        }
+        
+        // 全ての数字要素にCanvasを追加
+        function initializeCanvasDigits() {
+            document.querySelectorAll('.digit').forEach(digitEl => {
+                const digitText = digitEl.textContent.trim();
+                digitEl.dataset.value = digitText; // 数字の値を保存
+                digitEl.innerHTML = '';
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = 400;
+                canvas.height = 600;
+                digitEl.appendChild(canvas);
+                
+                drawDigitOnCanvas(canvas, digitText);
+            });
+        }
+        
+        // ページ読み込み時に初期化
+        setTimeout(() => {
+            initializeCanvasDigits();
+        }, 100);
+
+        // デフォルトのサイズと間隔を設定
+        document.documentElement.style.setProperty('--digit-size', '35rem');
+        document.documentElement.style.setProperty('--digit-gap', '15px');
+        document.documentElement.style.setProperty('--company-name-position', '13%');
+        document.documentElement.style.setProperty('--score-top', '61%');
+        document.documentElement.style.setProperty('--score-left', '50%');
+        
+        // 停止タイミング設定（デフォルト値）
+        let stopTiming = {
+            digit1: 11000,  // 十の位: 11秒後
+            digit2: 13000   // 一の位: 13秒後
+        };
+        
+        // 数字用グラデーション色の設定
+        let digitGradientColors = {
+            color1: '#C6E1F5',
+            color2: '#2A57C0',
+            color3: '#000000'
+        };
+        
+        // 数字用影の設定
+        let digitShadowBlur = 3;
+        let digitShadowOpacity = 80;
+        
+        // チーム名用グラデーション色の設定
+        let companyGradientColors = {
+            color1: '#4E95CA',
+            color2: '#3B76B5',
+            color3: '#255683'
+        };
+        
+        // チーム名用影の設定
+        let companyShadowBlur = 4;
+        let companyShadowOpacity = 31;
+
+        // ページ読み込み時に保存された設定を復元
+        function restoreSettings() {
+            // 点数サイズ
+            const digitSize = localStorage.getItem('ranking_digitSize');
+            if (digitSize) {
+                document.documentElement.style.setProperty('--digit-size', digitSize + 'rem');
+            }
+            
+            // 数字の間隔
+            const digitGap = localStorage.getItem('ranking_digitGap');
+            if (digitGap) {
+                document.documentElement.style.setProperty('--digit-gap', digitGap + 'px');
+            }
+            
+            // 会社名の位置
+            const companyNamePosition = localStorage.getItem('ranking_companyNamePosition');
+            if (companyNamePosition) {
+                document.documentElement.style.setProperty('--company-name-position', companyNamePosition + '%');
+            }
+            
+            // 点数の位置
+            const scoreTop = localStorage.getItem('ranking_scoreTop');
+            const scoreLeft = localStorage.getItem('ranking_scoreLeft');
+            if (scoreTop) document.documentElement.style.setProperty('--score-top', scoreTop + '%');
+            if (scoreLeft) document.documentElement.style.setProperty('--score-left', scoreLeft + '%');
+            
+            // 停止タイミング
+            const digit1StopTime = localStorage.getItem('ranking_digit1StopTime');
+            const digit2StopTime = localStorage.getItem('ranking_digit2StopTime');
+            if (digit1StopTime && digit2StopTime) {
+                stopTiming.digit1 = parseFloat(digit1StopTime) * 1000;
+                stopTiming.digit2 = parseFloat(digit2StopTime) * 1000;
+            }
+            
+            // 100点演出
+            const perfectEffect = localStorage.getItem('ranking_perfectEffect');
+            if (perfectEffect) {
+                window.perfectEffect = perfectEffect;
+            }
+            
+            // 数字用グラデーション色
+            const digitGradientColor1 = localStorage.getItem('ranking_digitGradientColor1');
+            const digitGradientColor2 = localStorage.getItem('ranking_digitGradientColor2');
+            const digitGradientColor3 = localStorage.getItem('ranking_digitGradientColor3');
+            if (digitGradientColor1) digitGradientColors.color1 = digitGradientColor1;
+            if (digitGradientColor2) digitGradientColors.color2 = digitGradientColor2;
+            if (digitGradientColor3) digitGradientColors.color3 = digitGradientColor3;
+            
+            // 数字用影の設定
+            const digitShadowBlurValue = localStorage.getItem('ranking_digitShadowBlur');
+            const digitShadowOpacityValue = localStorage.getItem('ranking_digitShadowOpacity');
+            if (digitShadowBlurValue) digitShadowBlur = parseInt(digitShadowBlurValue);
+            if (digitShadowOpacityValue) digitShadowOpacity = parseInt(digitShadowOpacityValue);
+            
+            // チーム名用グラデーション色
+            const companyGradientColor1 = localStorage.getItem('ranking_companyGradientColor1');
+            const companyGradientColor2 = localStorage.getItem('ranking_companyGradientColor2');
+            const companyGradientColor3 = localStorage.getItem('ranking_companyGradientColor3');
+            if (companyGradientColor1) companyGradientColors.color1 = companyGradientColor1;
+            if (companyGradientColor2) companyGradientColors.color2 = companyGradientColor2;
+            if (companyGradientColor3) companyGradientColors.color3 = companyGradientColor3;
+            
+            // チーム名用影の設定
+            const companyShadowBlurValue = localStorage.getItem('ranking_companyShadowBlur');
+            const companyShadowOpacityValue = localStorage.getItem('ranking_companyShadowOpacity');
+            if (companyShadowBlurValue) companyShadowBlur = parseInt(companyShadowBlurValue);
+            if (companyShadowOpacityValue) companyShadowOpacity = parseInt(companyShadowOpacityValue);
+            
+            console.log('設定を復元しました:', {
+                digitSize, digitGap, companyNamePosition, scoreTop, scoreLeft,
+                stopTiming, perfectEffect, digitGradientColors, digitShadowBlur, digitShadowOpacity,
+                companyGradientColors, companyShadowBlur, companyShadowOpacity
+            });
+        }
+        
+        // ページ読み込み時に復元
+        restoreSettings();
+
+        // 接続時にランキングデータをリクエスト
+        socket.on('connect', () => {
+            console.log('サーバーに接続しました');
+            socket.emit('request-ranking-data');
+            socket.emit('request-team-names'); // チーム名をリクエスト
+        });
+        
+        // チーム名を受信
+        socket.on('team-names', (data) => {
+            teamNames = data.teamNames;
+            console.log('チーム名受信:', teamNames);
+            // 初期表示として最初のチーム名を表示
+            currentTeamName = teamNames[0];
+            updateCompanyName(currentTeamName);
+        });
+
+        // ランキングデータを受信
+        socket.on('ranking-data', (data) => {
+            console.log('受信したデータ:', data);
+            totalScore = data.total;
+            // チーム名は変更しない（currentTeamNameを保持）
+        });
+
+        // ラウンド変更を受信
+        socket.on('round-changed', (round) => {
+            console.log('ラウンド変更を受信:', round);
+            // ラウンドに応じたチーム名を保持・表示
+            currentTeamName = teamNames[round - 1];
+            console.log('現在のチーム名:', currentTeamName);
+            updateCompanyName(currentTeamName);
+            // 新しいラウンドのデータをリクエスト
+            socket.emit('request-ranking-data');
+        });
+        
+        // 会社名を更新
+        function updateCompanyName(name) {
+            const companyNameDiv = document.getElementById('companyName');
+            companyNameDiv.dataset.text = name || ''; // テキストを保存
+            companyNameDiv.innerHTML = ''; // クリア
+            
+            if (name) {
+                // テキストの幅を測定してキャンバスサイズを決定
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.font = 'bold 80px Poppins, sans-serif';
+                const textWidth = tempCtx.measureText(name).width;
+                
+                // キャンバスを作成
+                const canvas = document.createElement('canvas');
+                canvas.width = textWidth + 100; // 余白を追加
+                canvas.height = 120;
+                companyNameDiv.appendChild(canvas);
+                
+                // 会社名を描画
+                drawCompanyNameOnCanvas(canvas, name);
+            }
+            
+            companyNameDiv.classList.remove('hide');
+            companyNameDiv.classList.add('show');
+        }
+
+        // 親機からのスタートトリガーを受信
+        socket.on('start-animation', () => {
+            console.log('親機から得点GOトリガー受信');
+            if (!animationRunning) {
+                startAnimation();
+            }
+        });
+
+        // ランキングリセットを受信
+        socket.on('reset-ranking-display', () => {
+            console.log('ランキングリセット');
+            totalScore = 0; // 合計点をリセット
+            resetToZero();
+            hideOverlayAndCompany();
+        });
+        
+        // フォント変更を受信
+        socket.on('font-changed', (data) => {
+            console.log('フォント変更受信:', data.fontFamily);
+            
+            // CSS変数を更新（数字部分）
+            document.documentElement.style.setProperty('--digit-font', data.fontFamily);
+            
+            // body全体のフォントも変更
+            document.body.style.fontFamily = data.fontFamily;
+            
+            // 数字要素に直接適用
+            const digits = document.querySelectorAll('.digit');
+            digits.forEach(digit => {
+                digit.style.fontFamily = data.fontFamily;
+            });
+            
+            // 単位「点」にも適用
+            const unit = document.querySelector('.unit');
+            if (unit) {
+                unit.style.fontFamily = data.fontFamily;
+            }
+            
+            // タイトルにも適用
+            const title = document.querySelector('.title');
+            if (title) {
+                title.style.fontFamily = data.fontFamily;
+            }
+        });
+        
+        // 点数サイズ変更を受信
+        socket.on('digit-size-changed', (data) => {
+            console.log('点数サイズ変更受信:', data.size);
+            localStorage.setItem('ranking_digitSize', data.size);
+            document.documentElement.style.setProperty('--digit-size', data.size + 'rem');
+        });
+        
+        // 数字間隔変更を受信
+        socket.on('digit-gap-changed', (data) => {
+            console.log('数字間隔変更受信:', data.gap);
+            localStorage.setItem('ranking_digitGap', data.gap);
+            document.documentElement.style.setProperty('--digit-gap', data.gap + 'px');
+        });
+        
+        // 会社名位置変更を受信
+        socket.on('company-name-position-changed', (data) => {
+            console.log('会社名位置変更受信:', data.position);
+            localStorage.setItem('ranking_companyNamePosition', data.position);
+            document.documentElement.style.setProperty('--company-name-position', data.position + '%');
+        });
+        
+        // 点数位置変更を受信
+        socket.on('score-position-changed', (data) => {
+            console.log('点数位置変更受信:', data);
+            localStorage.setItem('ranking_scoreTop', data.top);
+            localStorage.setItem('ranking_scoreLeft', data.left);
+            document.documentElement.style.setProperty('--score-top', data.top + '%');
+            document.documentElement.style.setProperty('--score-left', data.left + '%');
+        });
+        
+        // 停止タイミング変更を受信
+        socket.on('stop-timing-changed', (data) => {
+            console.log('停止タイミング変更受信:', data);
+            stopTiming = data;
+            localStorage.setItem('ranking_digit1StopTime', data.digit1 / 1000);
+            localStorage.setItem('ranking_digit2StopTime', data.digit2 / 1000);
+        });
+        
+        // 100点演出変更を受信
+        socket.on('perfect-effect-changed', (data) => {
+            console.log('100点演出変更受信:', data.effect);
+            perfectEffect = data.effect;
+            localStorage.setItem('ranking_perfectEffect', data.effect);
+        });
+        
+        // 数字用グラデーション色変更を受信
+        socket.on('digit-gradient-colors-changed', (data) => {
+            console.log('数字グラデーション色変更受信:', data);
+            digitGradientColors = data;
+            localStorage.setItem('ranking_digitGradientColor1', data.color1);
+            localStorage.setItem('ranking_digitGradientColor2', data.color2);
+            localStorage.setItem('ranking_digitGradientColor3', data.color3);
+            // 既存の数字を再描画
+            document.querySelectorAll('.digit').forEach((digit) => {
+                const canvas = digit.querySelector('canvas');
+                if (canvas && digit.dataset.value) {
+                    drawDigitOnCanvas(canvas, digit.dataset.value);
+                }
+            });
+        });
+        
+        // 数字用影のぼかし変更を受信
+        socket.on('digit-shadow-blur-changed', (data) => {
+            console.log('数字影のぼかし変更受信:', data);
+            digitShadowBlur = data.blur;
+            localStorage.setItem('ranking_digitShadowBlur', data.blur);
+            // 既存の数字を再描画
+            document.querySelectorAll('.digit').forEach((digit) => {
+                const canvas = digit.querySelector('canvas');
+                if (canvas && digit.dataset.value) {
+                    drawDigitOnCanvas(canvas, digit.dataset.value);
+                }
+            });
+        });
+        
+        // 数字用影の濃さ変更を受信
+        socket.on('digit-shadow-opacity-changed', (data) => {
+            console.log('数字影の濃さ変更受信:', data);
+            digitShadowOpacity = data.opacity;
+            localStorage.setItem('ranking_digitShadowOpacity', data.opacity);
+            // 既存の数字を再描画
+            document.querySelectorAll('.digit').forEach((digit) => {
+                const canvas = digit.querySelector('canvas');
+                if (canvas && digit.dataset.value) {
+                    drawDigitOnCanvas(canvas, digit.dataset.value);
+                }
+            });
+        });
+        
+        // チーム名用グラデーション色変更を受信
+        socket.on('company-gradient-colors-changed', (data) => {
+            console.log('チーム名グラデーション色変更受信:', data);
+            companyGradientColors = data;
+            localStorage.setItem('ranking_companyGradientColor1', data.color1);
+            localStorage.setItem('ranking_companyGradientColor2', data.color2);
+            localStorage.setItem('ranking_companyGradientColor3', data.color3);
+            // 会社名を再描画
+            const companyNameEl = document.getElementById('companyName');
+            if (companyNameEl && companyNameEl.dataset.text) {
+                const canvas = companyNameEl.querySelector('canvas');
+                if (canvas) {
+                    drawCompanyNameOnCanvas(canvas, companyNameEl.dataset.text);
+                }
+            }
+        });
+        
+        // チーム名用影のぼかし変更を受信
+        socket.on('company-shadow-blur-changed', (data) => {
+            console.log('チーム名影のぼかし変更受信:', data);
+            companyShadowBlur = data.blur;
+            localStorage.setItem('ranking_companyShadowBlur', data.blur);
+            // 会社名を再描画
+            const companyNameEl = document.getElementById('companyName');
+            if (companyNameEl && companyNameEl.dataset.text) {
+                const canvas = companyNameEl.querySelector('canvas');
+                if (canvas) {
+                    drawCompanyNameOnCanvas(canvas, companyNameEl.dataset.text);
+                }
+            }
+        });
+        
+        // チーム名用影の濃さ変更を受信
+        socket.on('company-shadow-opacity-changed', (data) => {
+            console.log('チーム名影の濃さ変更受信:', data);
+            companyShadowOpacity = data.opacity;
+            localStorage.setItem('ranking_companyShadowOpacity', data.opacity);
+            // 会社名を再描画
+            const companyNameEl = document.getElementById('companyName');
+            if (companyNameEl && companyNameEl.dataset.text) {
+                const canvas = companyNameEl.querySelector('canvas');
+                if (canvas) {
+                    drawCompanyNameOnCanvas(canvas, companyNameEl.dataset.text);
+                }
+            }
+        });
+        
+        // 紙吹雪を発生させる関数
+        function createConfetti() {
+            const container = document.getElementById('confettiContainer');
+            container.innerHTML = ''; // クリア
+            container.classList.add('active'); // 表示
+            
+            const colors = ['#ffd700', '#ff6b6b', '#4ecdc4', '#45b7d1', '#f7b731', '#5f27cd'];
+            const confettiCount = 1000;
+            
+            for (let i = 0; i < confettiCount; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + '%';
+                confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.animationDelay = Math.random() * 0.5 + 's';
+                confetti.style.animationDuration = (Math.random() * 1 + 2) + 's';
+                container.appendChild(confetti);
+            }
+            
+            // 3秒後にクリアして非表示
+            setTimeout(() => {
+                container.innerHTML = '';
+                container.classList.remove('active');
+            }, 3500);
+        }
+        
+        // 光の爆発を作成する関数
+        function createLightBurst() {
+            const container = document.getElementById('burstContainer');
+            container.innerHTML = ''; // 既存の光線をクリア
+            
+            // フラッシュオーバーレイ
+            const flash = document.createElement('div');
+            flash.className = 'flash-overlay';
+            document.body.appendChild(flash);
+            
+            // 放射状の光線を作成 (24本)
+            const rayCount = 24;
+            for (let i = 0; i < rayCount; i++) {
+                const ray = document.createElement('div');
+                ray.className = 'burst-ray';
+                const angle = (360 / rayCount) * i;
+                ray.style.transform = `rotate(${angle}deg)`;
+                container.appendChild(ray);
+            }
+            
+            // アニメーション終了後にクリア
+            setTimeout(() => {
+                container.innerHTML = '';
+                if (flash.parentNode) {
+                    flash.parentNode.removeChild(flash);
+                }
+            }, 1000);
+        }
+        
+        // 星の輝きを作成する関数
+        function createStars() {
+            const container = document.getElementById('starsContainer');
+            container.innerHTML = '';
+            
+            const starCount = 30;
+            for (let i = 0; i < starCount; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 0.5 + 's';
+                container.appendChild(star);
+            }
+            
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 2500);
+        }
+        
+        // 虹の波を作成する関数
+        function createRainbow() {
+            const container = document.getElementById('rainbowContainer');
+            container.innerHTML = '';
+            
+            for (let i = 0; i < 3; i++) {
+                const wave = document.createElement('div');
+                wave.className = 'rainbow-wave';
+                wave.style.animationDelay = (i * 0.3) + 's';
+                container.appendChild(wave);
+            }
+            
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 3000);
+        }
+        
+        // 花火を作成する関数
+        function createFireworks() {
+            const container = document.getElementById('fireworksContainer');
+            container.innerHTML = '';
+            
+            const colors = ['#ff0000', '#ff7700', '#ffdd00', '#00ff00', '#0088ff', '#aa00ff'];
+            const positions = [
+                {x: 30, y: 30},
+                {x: 70, y: 30},
+                {x: 50, y: 50},
+                {x: 20, y: 60},
+                {x: 80, y: 60}
+            ];
+            
+            positions.forEach((pos, index) => {
+                setTimeout(() => {
+                    const particleCount = 60;
+                    for (let i = 0; i < particleCount; i++) {
+                        const firework = document.createElement('div');
+                        firework.className = 'firework';
+                        firework.style.left = pos.x + '%';
+                        firework.style.top = pos.y + '%';
+                        firework.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                        
+                        const angle = (Math.PI * 2 * i) / particleCount;
+                        const velocity = 150 + Math.random() * 150;
+                        const tx = Math.cos(angle) * velocity;
+                        const ty = Math.sin(angle) * velocity;
+                        
+                        firework.style.setProperty('--tx', tx + 'px');
+                        firework.style.setProperty('--ty', ty + 'px');
+                        firework.style.transform = `translate(var(--tx), var(--ty))`;
+                        
+                        container.appendChild(firework);
+                    }
+                }, index * 300);
+            });
+            
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 3000);
+        }
+        
+        // ハートを作成する関数
+        function createHearts() {
+            const container = document.getElementById('heartsContainer');
+            container.innerHTML = '';
+            
+            const heartCount = 25;
+            const colors = ['#ff69b4', '#ff1493', '#ff69b4', '#ffc0cb', '#ff1493'];
+            
+            for (let i = 0; i < heartCount; i++) {
+                const heart = document.createElement('div');
+                heart.className = 'heart';
+                heart.textContent = '💗';
+                heart.style.left = Math.random() * 100 + '%';
+                heart.style.color = colors[Math.floor(Math.random() * colors.length)];
+                heart.style.animationDelay = Math.random() * 0.8 + 's';
+                container.appendChild(heart);
+            }
+            
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 3500);
+        }
+        
+        // 稲妻を作成する関数
+        function createLightning() {
+            const container = document.getElementById('lightningContainer');
+            container.innerHTML = '';
+            
+            const lightningCount = 8;
+            for (let i = 0; i < lightningCount; i++) {
+                setTimeout(() => {
+                    const lightning = document.createElement('div');
+                    lightning.className = 'lightning';
+                    lightning.style.left = Math.random() * 100 + '%';
+                    lightning.style.top = '0';
+                    container.appendChild(lightning);
+                    
+                    const flash = document.createElement('div');
+                    flash.className = 'lightning-flash';
+                    document.body.appendChild(flash);
+                    
+                    setTimeout(() => {
+                        if (lightning.parentNode) lightning.parentNode.removeChild(lightning);
+                        if (flash.parentNode) flash.parentNode.removeChild(flash);
+                    }, 300);
+                }, i * 200);
+            }
+            
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 2000);
+        }
+        
+        // キラキラ粒子を作成する関数
+        function createSparkles() {
+            const container = document.getElementById('sparklesContainer');
+            container.innerHTML = '';
+            
+            const sparkleCount = 100;
+            for (let i = 0; i < sparkleCount; i++) {
+                const sparkle = document.createElement('div');
+                sparkle.className = 'sparkle';
+                sparkle.style.left = Math.random() * 100 + '%';
+                sparkle.style.bottom = '-20px';
+                sparkle.style.animationDelay = Math.random() * 1 + 's';
+                container.appendChild(sparkle);
+            }
+            
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 3500);
+        }
+        
+        // スポットライトを作成する関数
+        function createSpotlight() {
+            const container = document.getElementById('spotlightContainer');
+            container.innerHTML = '';
+            container.style.display = 'block';
+            
+            const spotlight = document.createElement('div');
+            spotlight.className = 'spotlight';
+            spotlight.style.left = '50%';
+            spotlight.style.top = '50%';
+            container.appendChild(spotlight);
+            
+            setTimeout(() => {
+                container.style.display = 'none';
+                container.innerHTML = '';
+            }, 3000);
+        }
+        
+        // パルス波を作成する関数
+        function createPulse() {
+            const container = document.getElementById('pulseContainer');
+            container.innerHTML = '';
+            
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => {
+                    const wave = document.createElement('div');
+                    wave.className = 'pulse-wave';
+                    container.appendChild(wave);
+                    
+                    setTimeout(() => {
+                        if (wave.parentNode) wave.parentNode.removeChild(wave);
+                    }, 2000);
+                }, i * 400);
+            }
+            
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 3500);
+        }
+
+        function resetToZero() {
+            animationRunning = false;
+            const rollers = [
+                document.getElementById('digit1'),
+                document.getElementById('digit0')
+            ];
+            
+            // 全ての桁を0に戻す
+            rollers.forEach(roller => {
+                roller.style.transition = 'transform 0.3s ease-out';
+                roller.style.transform = 'translateY(0)';
+            });
+        }
+
+        function hideOverlayAndCompany() {
+            const overlayContainer = document.getElementById('overlayContainer');
+            const overlayImage = document.getElementById('overlayImage');
+            const topBand = document.querySelector('.top-band');
+            const bottomBand = document.querySelector('.bottom-band');
+            
+            overlayContainer.classList.remove('show');
+            overlayImage.classList.remove('show');
+            topBand.classList.remove('animate');
+            bottomBand.classList.remove('animate');
+            topBand.classList.remove('sparkle');
+            bottomBand.classList.remove('sparkle');
+            
+            // アニメーションをリセット（重要：animateクラスを外した後に初期位置に戻す）
+            setTimeout(() => {
+                topBand.style.transform = 'translateX(100%)';
+                bottomBand.style.transform = 'translateX(-100%)';
+            }, 10);
+            // 会社名は非表示にしない（常に表示）
+        }
+
+        function showOverlayAndCompany(score, clientName) {
+            const overlayContainer = document.getElementById('overlayContainer');
+            const overlayImage = document.getElementById('overlayImage');
+            const topBandImg = document.getElementById('topBandImg');
+            const bottomBandImg = document.getElementById('bottomBandImg');
+            const topBand = document.querySelector('.top-band');
+            const bottomBand = document.querySelector('.bottom-band');
+            
+            console.log('showOverlayAndCompany called, score:', score);
+            console.log('topBand element:', topBand);
+            console.log('topBand initial transform:', window.getComputedStyle(topBand).transform);
+            
+            // スコアに応じて帯画像を選択（中央画像は使わない）
+            if (score >= 80) {
+                topBandImg.src = '/gazou/excellent_obi.png';
+                bottomBandImg.src = '/gazou/excellent_obi.png';
+            } else if (score >= 0) {
+                topBandImg.src = '/gazou/good_obi.png';
+                bottomBandImg.src = '/gazou/good_obi.png';
+            } else {
+                topBandImg.src = '';
+                bottomBandImg.src = '';
+            }
+            
+            // 会社名を更新（現在のラウンドのチーム名を常に使用）
+            console.log('表示するチーム名:', currentTeamName);
+            updateCompanyName(currentTeamName);
+            
+            // 画像表示
+            if (score >= 0) {
+                console.log('Score >= 0, showing overlay and starting animation');
+                overlayContainer.classList.add('show');
+                
+                // 確実に初期位置に戻す
+                topBand.style.transform = 'translateX(100%)';
+                bottomBand.style.transform = 'translateX(-100%)';
+                
+                // 帯のアニメーション開始
+                setTimeout(() => {
+                    console.log('Adding animate class to bands');
+                    topBand.classList.add('animate');
+                    bottomBand.classList.add('animate');
+                    console.log('topBand classes:', topBand.className);
+                    
+                    // スコアに応じてSEを再生（0.2秒遅延）
+                    setTimeout(() => {
+                        if (score >= 80) {
+                            const excellentSound = document.getElementById('soundExcellent');
+                            excellentSound.currentTime = 0;
+                            excellentSound.play();
+                        } else if (score >= 0) {
+                            const goodSound = document.getElementById('soundGood');
+                            goodSound.currentTime = 0;
+                            goodSound.play();
+                        }
+                    }, 200);
+                }, 100);
+                
+                // 100点ピッタリの時だけ特別演出
+                if (score === 100) {
+                    setTimeout(() => {
+                        if (perfectEffect === 'confetti') {
+                            createConfetti();
+                        } else if (perfectEffect === 'stars') {
+                            createStars();
+                        } else if (perfectEffect === 'fireworks') {
+                            createFireworks();
+                        } else if (perfectEffect === 'sparkle-band') {
+                            // 帯にキラキラクラスを追加
+                            topBand.classList.add('sparkle');
+                            bottomBand.classList.add('sparkle');
+                            
+                            // 3秒後にキラキラを停止
+                            setTimeout(() => {
+                                topBand.classList.remove('sparkle');
+                                bottomBand.classList.remove('sparkle');
+                            }, 3000);
+                        }
+                    }, 500);
+                }
+            }
+        }
+
+        function startAnimation() {
+            animationRunning = true;
+            const soundNo1 = document.getElementById('soundNo1');
+            const soundNo2 = document.getElementById('soundNo2_11sec');
+            const soundNo3 = document.getElementById('soundNo3');
+            const soundNo4 = document.getElementById('soundNo4');
+            
+            console.log('アニメーション開始 - 合計点:', totalScore);
+            console.log('停止タイミング設定:', stopTiming);
+            
+            // No.1とNo.3を同時に再生
+            soundNo1.play().then(() => {
+                console.log('No.1 再生開始');
+            }).catch(e => {
+                console.error('No.1 再生エラー:', e);
+            });
+            
+            soundNo3.play().then(() => {
+                console.log('No.3 再生開始');
+            }).catch(e => {
+                console.error('No.3 再生エラー:', e);
+            });
+            
+            // No.2を十の位の停止タイミングで再生
+            setTimeout(() => {
+                soundNo2.play().then(() => {
+                    console.log(`No.2 (十の位: ${stopTiming.digit1}ms) 再生開始`);
+                }).catch(e => {
+                    console.error('No.2 (十の位) 再生エラー:', e);
+                });
+            }, stopTiming.digit1);
+            
+            // No.4を一の位の停止タイミングで再生
+            setTimeout(() => {
+                soundNo4.play().then(() => {
+                    console.log(`No.4 (一の位: ${stopTiming.digit2}ms) 再生開始`);
+                }).catch(e => {
+                    console.error('No.4 (一の位) 再生エラー:', e);
+                });
+            }, stopTiming.digit2);
+            
+            // 表示点数を合計-1に変更（最小0、最大99）
+            const displayScore = Math.max(0, Math.min(99, totalScore - 1));
+            
+            // 数字を分解（最大2桁）
+            const digits = String(displayScore).padStart(2, '0').split('').map(Number);
+            
+            // スロットアニメーション開始
+            startSlotAnimation(digits);
+        }
+
+        function startSlotAnimation(targetDigits) {
+            const rollers = [
+                document.getElementById('digit1'),
+                document.getElementById('digit0')
+            ];
+            
+            // 最終的な回転間隔（最高速度）
+            const finalRollSpeeds = [
+                70,  // 70ms（少し遅めで見やすく）
+                70
+            ];
+            
+            // 初期速度（遅い）
+            const initialRollSpeeds = [
+                300,  // 300ms（よりゆっくり）
+                310
+            ];
+            
+            // 現在の速度
+            let currentSpeeds = [...initialRollSpeeds];
+            
+            let currentPositions = [0, 0];
+            let lastRotateTime = [Date.now(), Date.now()];
+            let stopped = [false, false]; // 各桁の停止フラグ
+            let started = [false, false]; // 各桁の開始フラグ
+            
+            // 各桁の開始遅延（十の位、一の位の順）
+            const startDelays = [0, 400]; // 0ms, 400ms
+            
+            // 加速処理（0〜7秒で徐々に速度を上げる）
+            const accelerationDuration = 7000; // 7秒
+            const startTime = Date.now();
+            
+            // requestAnimationFrameで滑らかに回転
+            const animate = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / accelerationDuration, 1); // 0〜1
+                
+                // 各桁の速度を計算（イージング関数で滑らかに）
+                for (let i = 0; i < 2; i++) {
+                    // 開始遅延チェック
+                    if (!started[i]) {
+                        if (elapsed >= startDelays[1 - i]) { // 逆順で開始（0の位→1の位）
+                            started[i] = true;
+                            lastRotateTime[i] = Date.now();
+                        } else {
+                            continue; // まだ開始時間ではない
+                        }
+                    }
+                    
+                    // 停止済みの桁はスキップ
+                    if (stopped[i]) continue;
+                    
+                    // 2次関数でイージング（滑らかに加速）
+                    const easedProgress = progress * progress;
+                    currentSpeeds[i] = initialRollSpeeds[i] + (finalRollSpeeds[i] - initialRollSpeeds[i]) * easedProgress;
+                    
+                    // 現在の速度に応じて回転
+                    const now = Date.now();
+                    if (now - lastRotateTime[i] >= currentSpeeds[i]) {
+                        currentPositions[i] = currentPositions[i] + 1;
+                        
+                        const digitSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--digit-size')) || 18;
+                        const transitionDuration = currentSpeeds[i] / 1000;
+                        
+                        // 20まで行ったら0にリセット（0-9が2回繰り返されているので）
+                        if (currentPositions[i] >= 20) {
+                            // transitionなしで瞬時に0に戻す
+                            rollers[i].style.transition = 'none';
+                            rollers[i].style.transform = `translateY(0)`;
+                            currentPositions[i] = 0;
+                            
+                            // 次のフレームで通常の回転を再開
+                            requestAnimationFrame(() => {
+                                currentPositions[i] = 1;
+                                rollers[i].style.transition = `transform ${transitionDuration}s linear`;
+                                rollers[i].style.transform = `translateY(-${digitSize}rem)`;
+                            });
+                        } else {
+                            // 通常の回転
+                            rollers[i].style.transition = `transform ${transitionDuration}s linear`;
+                            rollers[i].style.transform = `translateY(-${currentPositions[i] * digitSize}rem)`;
+                        }
+                        
+                        lastRotateTime[i] = now;
+                    }
+                }
+                
+                // アニメーション継続（いずれかが回転中なら続ける）
+                if (animationRunning && stopped.some(s => !s)) {
+                    requestAnimationFrame(animate);
+                }
+            };
+            
+            // アニメーション開始
+            requestAnimationFrame(animate);
+            
+            // 回転停止のタイミング
+            const stopRolling = () => {
+                console.log('スロット停止開始');
+                
+                // 一の位を停止（設定されたタイミングで）
+                setTimeout(() => {
+                    stopped[1] = true;
+                    snapToTarget(rollers[1], targetDigits[1]);
+                    console.log('一の位 停止');
+                }, stopTiming.digit1);
+                
+                // 十の位を停止
+                setTimeout(() => {
+                    stopped[0] = true;
+                    snapToTarget(rollers[0], targetDigits[0]);
+                    console.log('十の位 停止 - 完了！');
+                    
+                    // アニメーション完了後、オーバーレイと会社名を表示
+                    setTimeout(() => {
+                        showOverlayAndCompany(totalScore, currentClientName);
+                    }, 1300);
+                }, stopTiming.digit2);
+            };
+            
+            // タイマーで停止
+            setTimeout(stopRolling, 100); // すぐに停止タイミングを計算
+        }
+
+        // バン！と止める（強制的に目標の数字に移動）
+        function snapToTarget(roller, targetDigit) {
+            roller.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+            const digitSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--digit-size')) || 18;
+            roller.style.transform = `translateY(-${targetDigit * digitSize}rem)`;
+        }
+
+        // 色変更（無効化）
+        // 初期色を適用（濃紺色）
+    </script>
+</body>
+</html>

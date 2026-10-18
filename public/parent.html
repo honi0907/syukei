@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>親機 - 点数集計システム</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="parent-page">
+    <header class="header">
+        <h1>親機 - 点数集計システム</h1>
+        <div class="server-status">
+            <span class="status-dot"></span>
+            <span>サーバー稼働中 (ポート: 5555)</span>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <!-- カラム1: コントロールパネル -->
+        <div class="column column-control">
+            <!-- 得点発表 -->
+            <div class="control-card">
+                <h3>得点発表</h3>
+                <div class="button-group">
+                    <button class="btn btn-primary btn-full" onclick="showRanking()">
+                        ウィンドウ表示
+                    </button>
+                    <button class="btn btn-warning btn-full" onclick="showRankingFullscreen()">
+                        フルスクリーン表示
+                    </button>
+                    <div class="button-row-action">
+                        <button class="btn btn-danger btn-action btn-go" onclick="triggerGo()">
+                            得点GO!
+                        </button>
+                        <button class="btn btn-info btn-action" onclick="resetRanking()">
+                            リセット
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- システム -->
+            <div class="control-card">
+                <h3>システム</h3>
+                <div class="button-group">
+                    <div class="button-row">
+                        <button class="btn btn-success btn-full" onclick="unlockAll()">
+                            ロック解除
+                        </button>
+                        <button class="btn btn-warning btn-full" onclick="lockAll()">
+                            ロック
+                        </button>
+                    </div>
+                    <button class="btn btn-secondary btn-full" onclick="resetCurrentRound()">
+                        現在のラウンドをリセット
+                    </button>
+                    <button class="btn btn-danger btn-full" onclick="resetAllRounds()">
+                        全ラウンドリセット
+                    </button>
+                    <button class="btn btn-secondary btn-full" onclick="openSettings()">
+                        設定…
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- カラム2: 子機情報 -->
+        <div class="column column-clients">
+            <div class="client-info-card">
+                <div class="client-header">
+                    <h3>子機情報</h3>
+                    <span class="client-count-badge">接続中: <span id="clientCount">0</span>台</span>
+                </div>
+                <div class="table-wrapper">
+                    <table class="score-table">
+                        <thead>
+                            <tr>
+                                <th>子機名</th>
+                                <th>点数</th>
+                                <th>状態</th>
+                                <th>最終更新</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scoreTableBody">
+                            <tr>
+                                <td colspan="4" class="no-data">子機からの接続を待っています...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- カラム3: 合計得点 -->
+        <div class="column column-total">
+            <div class="total-score-card">
+                <h2>合計得点</h2>
+                <div class="total-display" id="totalScore">0</div>
+                <p class="total-label">点</p>
+            </div>
+            
+            <div class="round-card">
+                <h3>チーム選択</h3>
+                <div class="round-selector-buttons">
+                    <button class="btn-round" onclick="switchRound(1)">A</button>
+                    <button class="btn-round" onclick="switchRound(2)">B</button>
+                    <button class="btn-round" onclick="switchRound(3)">C</button>
+                    <button class="btn-round" onclick="switchRound(4)">D</button>
+                    <button class="btn-round" onclick="switchRound(5)">E</button>
+                </div>
+                <div class="current-round-display">
+                    現在: <span id="currentRoundLabel">チームA</span>
+                </div>
+                
+                <div class="round-scores-summary">
+                    <h4>各チーム得点</h4>
+                    <div class="round-score-list" id="roundScoreList">
+                        <div class="round-score-item">A: <span id="round1Total">0</span>点</div>
+                        <div class="round-score-item">B: <span id="round2Total">0</span>点</div>
+                        <div class="round-score-item">C: <span id="round3Total">0</span>点</div>
+                        <div class="round-score-item">D: <span id="round4Total">0</span>点</div>
+                        <div class="round-score-item">E: <span id="round5Total">0</span>点</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const socket = io();
+        let clients = [];
+        let currentRound = 1;
+        let teamNames = ['A', 'B', 'C', 'D', 'E', 'F']; // デフォルト
+
+        // チーム名を受信
+        socket.on('team-names', (data) => {
+            teamNames = data.teamNames;
+            console.log('チーム名受信:', teamNames);
+            updateRoundButtons();
+            updateCurrentRoundLabel();
+        });
+
+        socket.on('client-connected', (data) => {
+            clients = data.clients;
+            updateDisplay();
+        });
+
+        socket.on('score-updated', (data) => {
+            clients = data.clients;
+            updateDisplay();
+        });
+
+        // 子機情報を受信
+        socket.on('clients-data', (data) => {
+            clients = data.clients;
+            updateDisplay();
+            console.log('子機情報を受信:', clients);
+        });
+
+        // チーム別の合計を受信
+        socket.on('team-totals', (data) => {
+            console.log('チーム別合計受信:', data);
+            // 各チームの合計を表示
+            data.teams.forEach((team, index) => {
+                const total = team.score || 0;
+                document.getElementById(`round${index + 1}Total`).textContent = total.toLocaleString();
+            });
+        });
+
+        socket.on('client-disconnected', (data) => {
+            clients = data.clients;
+            updateDisplay();
+        });
+
+        let draggedElement = null;
+        let draggedIndex = null;
+
+        function setupDragAndDrop() {
+            const rows = document.querySelectorAll('.draggable-row');
+            
+            rows.forEach(row => {
+                row.addEventListener('dragstart', handleDragStart);
+                row.addEventListener('dragover', handleDragOver);
+                row.addEventListener('drop', handleDrop);
+                row.addEventListener('dragenter', handleDragEnter);
+                row.addEventListener('dragleave', handleDragLeave);
+                row.addEventListener('dragend', handleDragEnd);
+            });
+        }
+
+        function handleDragStart(e) {
+            draggedElement = this;
+            draggedIndex = parseInt(this.dataset.index);
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.innerHTML);
+        }
+
+        function handleDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            e.dataTransfer.dropEffect = 'move';
+            return false;
+        }
+
+        function handleDragEnter(e) {
+            if (this !== draggedElement) {
+                this.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+            
+            if (draggedElement !== this) {
+                const dropIndex = parseInt(this.dataset.index);
+                
+                // 配列の要素を入れ替え
+                const draggedClient = clients[draggedIndex];
+                clients.splice(draggedIndex, 1);
+                clients.splice(dropIndex, 0, draggedClient);
+                
+                // 表示を更新
+                updateDisplay();
+            }
+            
+            return false;
+        }
+
+        function handleDragEnd(e) {
+            const rows = document.querySelectorAll('.draggable-row');
+            rows.forEach(row => {
+                row.classList.remove('dragging', 'drag-over');
+            });
+        }
+
+        function updateDisplay() {
+            // 合計計算（scoreがundefinedの場合は0として扱う）
+            const total = clients.reduce((sum, c) => sum + (c.score || 0), 0);
+            document.getElementById('totalScore').textContent = total.toLocaleString();
+            document.getElementById('clientCount').textContent = clients.length;
+
+            // スコアテーブル更新
+            const tbody = document.getElementById('scoreTableBody');
+            if (clients.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="no-data">データなし</td></tr>';
+            } else {
+                tbody.innerHTML = clients.map((c, index) => `
+                    <tr draggable="true" data-index="${index}" class="draggable-row">
+                        <td class="client-name-cell"><span class="drag-handle">⋮⋮</span> ${c.name}</td>
+                        <td class="score-value">${c.score || 0}点</td>
+                        <td>
+                            ${c.unlockRequested 
+                                ? `<button class="status-badge unlock-request-badge" onclick="unlockClient('${c.name}')">
+                                    解除申請
+                                   </button>`
+                                : `<span class="status-badge ${c.locked ? 'locked' : 'unlocked'}">
+                                    ${c.locked ? 'ロック中' : '入力可能'}
+                                   </span>`
+                            }
+                        </td>
+                        <td class="time-cell">${new Date(c.lastUpdate).toLocaleTimeString('ja-JP')}</td>
+                    </tr>
+                `).join('');
+                
+                // ドラッグ&ドロップイベントを設定
+                setupDragAndDrop();
+            }
+        }
+        
+        function unlockClient(clientName) {
+            socket.emit('unlock-client', { clientName });
+        }
+
+        async function isServerRunning() {
+            try {
+                const response = await fetch('/', { method: 'GET', cache: 'no-store' });
+                return response.ok;
+            } catch {
+                return false;
+            }
+        }
+
+        function alertServerNotRunning() {
+            alert('サーバーが起動していません。ランチャーで「サーバーを起動」してから操作してください。');
+        }
+
+        async function showRanking() {
+            if (!(await isServerRunning())) {
+                alertServerNotRunning();
+                return;
+            }
+            window.open('/ranking', '_blank', 'width=1280,height=720');
+        }
+
+        async function showRankingFullscreen() {
+            if (window.syukeiDesktop?.openScoreFullscreen) {
+                const result = await window.syukeiDesktop.openScoreFullscreen();
+                if (!result?.ok) {
+                    alert(result?.error || 'サーバーが起動していません。');
+                }
+                return;
+            }
+            if (!(await isServerRunning())) {
+                alertServerNotRunning();
+                return;
+            }
+            const popup = window.open('/ranking', '_blank', 'width=1280,height=720');
+            if (!popup) {
+                alert('ポップアップがブロックされました。');
+                return;
+            }
+            popup.addEventListener('load', () => {
+                try {
+                    popup.document.documentElement.requestFullscreen?.();
+                } catch {
+                    // ブラウザのみの場合は F11 を案内
+                }
+            });
+        }
+
+        function triggerGo() {
+            // 全てのランキングウィンドウに得点GO信号を送信
+            socket.emit('trigger-go');
+        }
+
+        function unlockAll() {
+            socket.emit('unlock-all');
+        }
+
+        function lockAll() {
+            socket.emit('lock-all');
+        }
+
+        function resetRanking() {
+            // ランキング画面を000にリセット
+            socket.emit('reset-ranking');
+        }
+
+        async function openSettings() {
+            if (window.syukeiDesktop?.openSettings) {
+                const result = await window.syukeiDesktop.openSettings();
+                if (!result?.ok) {
+                    alert(result?.error || '設定を開けませんでした。');
+                }
+                return;
+            }
+            if (!(await isServerRunning())) {
+                alertServerNotRunning();
+                return;
+            }
+            window.open('/settings', 'syukei-settings', 'width=980,height=720,menubar=no,toolbar=no');
+        }
+
+        function resetCurrentRound() {
+            const roundLabel = teamNames[currentRound - 1];
+            if (confirm(`${roundLabel}のスコアをリセットしますか？`)) {
+                socket.emit('reset-current-round', currentRound);
+            }
+        }
+
+        function resetAllRounds() {
+            if (confirm('全チームのスコアをリセットしますか？この操作は取り消せません。')) {
+                socket.emit('reset-all-rounds');
+            }
+        }
+
+        function switchRound(round) {
+            currentRound = round;
+            updateCurrentRoundLabel();
+            
+            // アクティブボタンの切り替え
+            document.querySelectorAll('.btn-round').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // サーバーにラウンド変更を通知
+            socket.emit('change-round', round);
+            
+            // ラウンド別データを要求
+            socket.emit('request-round-data', round);
+            
+            // チーム合計を更新
+            socket.emit('request-team-totals');
+        }
+        
+        function updateCurrentRoundLabel() {
+            const label = teamNames[currentRound - 1];
+            document.getElementById('currentRoundLabel').textContent = label;
+        }
+        
+        function updateRoundButtons() {
+            const buttons = document.querySelectorAll('.btn-round');
+            buttons.forEach((btn, index) => {
+                btn.textContent = teamNames[index].replace(/チーム/g, '').substring(0, 10);
+            });
+        }
+
+        // ラウンド別データを受信
+        socket.on('round-data', (data) => {
+            console.log('ラウンドデータ受信:', data);
+            // 完全に新しいデータで置き換え
+            clients = data.clients || [];
+            updateDisplay();
+        });
+
+        socket.on('connect', () => {
+            console.log('サーバーに接続しました');
+            socket.emit('request-current-round');
+            socket.emit('request-team-totals');
+            socket.emit('request-clients');
+            socket.emit('request-team-names');
+        });
+    </script>
+</body>
+</html>
