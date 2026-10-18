@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { registerAppUpdateIpc } = require('../app-updater');
+const { parseServerHost } = require('../parse-server-host');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -18,7 +19,7 @@ function getConfigPath() {
 
 function readSavedHost() {
     try {
-        const host = fs.readFileSync(getConfigPath(), 'utf8').trim();
+        const host = parseServerHost(fs.readFileSync(getConfigPath(), 'utf8'));
         return host || 'localhost';
     } catch {
         return 'localhost';
@@ -29,7 +30,7 @@ function saveHost(host) {
     fs.writeFileSync(getConfigPath(), host, 'utf8');
 }
 
-function pingServer(host) {
+function pingServerOnce(host) {
     return new Promise((resolve) => {
         const req = http.get(`http://${host}:${PORT}/client`, (res) => {
             res.resume();
@@ -41,6 +42,26 @@ function pingServer(host) {
             resolve(false);
         });
     });
+}
+
+/** @returns {Promise<{ ok: true; host: string } | { ok: false }>} */
+async function pingServer(hostInput) {
+    const parsed = parseServerHost(hostInput);
+    if (!parsed) {
+        return { ok: false };
+    }
+
+    const candidates =
+        parsed === 'localhost' || parsed === '127.0.0.1'
+            ? ['127.0.0.1', 'localhost']
+            : [parsed];
+
+    for (const host of candidates) {
+        if (await pingServerOnce(host)) {
+            return { ok: true, host };
+        }
+    }
+    return { ok: false };
 }
 
 function createConnectWindow() {
@@ -105,27 +126,31 @@ function openClientWindow(host, fullscreen) {
 ipcMain.handle('koki:get-default-host', () => readSavedHost());
 
 ipcMain.handle('koki:connect', async (_event, payload) => {
-    const host = (payload?.host || 'localhost').trim();
+    const raw = (payload?.host || 'localhost').trim();
+    const host = parseServerHost(raw);
     const fullscreen = Boolean(payload?.fullscreen);
 
     if (!host) {
-        return { ok: false, error: 'サーバーアドレスを入力してください。' };
-    }
-
-    const reachable = await pingServer(host);
-    if (!reachable) {
         return {
             ok: false,
-            error: `親機サーバーに接続できません（http://${host}:${PORT}/client）。\n親機でサーバーが起動しているか確認してください。`
+            error: 'サーバーアドレスを入力してください。（例: localhost または 192.168.1.10）'
         };
     }
 
-    saveHost(host);
-    openClientWindow(host, fullscreen);
+    const reachable = await pingServer(host);
+    if (!reachable.ok) {
+        return {
+            ok: false,
+            error: `親機サーバーに接続できません（http://${host}:${PORT}/client）。\n・親機で「サーバーを起動」しているか確認\n・アドレスは URL 全体ではなく IP または localhost のみ入力`
+        };
+    }
+
+    saveHost(reachable.host);
+    openClientWindow(reachable.host, fullscreen);
     if (connectWindow && !connectWindow.isDestroyed()) {
         connectWindow.hide();
     }
-    return { ok: true, url: `http://${host}:${PORT}/client` };
+    return { ok: true, url: `http://${reachable.host}:${PORT}/client` };
 });
 
 ipcMain.handle('app:version', () => ({

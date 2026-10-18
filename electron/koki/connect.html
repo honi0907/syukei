@@ -24,7 +24,7 @@
 <body>
     <div class="card">
         <h1>子機接続</h1>
-        <p>親機PCのIPアドレス（例: 192.168.1.10）または <code>localhost</code> を入力してください。</p>
+        <p>親機PCの IP（例: <code>192.168.1.10</code>）または <code>localhost</code> を入力してください。<br>ランチャーに表示される URL をそのまま貼る場合も自動で判別します。</p>
         <div id="status"></div>
         <label for="host">親機サーバーアドレス</label>
         <input type="text" id="host" placeholder="localhost" autocomplete="off">
@@ -49,10 +49,14 @@
         const connectFsBtn = document.getElementById('connectFsBtn');
 
         async function init() {
-            hostInput.value = await window.kokiAPI.getDefaultHost();
-            const info = await window.kokiAPI.getAppVersion();
-            document.getElementById('versionLine').textContent =
-                `集計システム 子機 v${info.version}`;
+            try {
+                hostInput.value = await window.kokiAPI.getDefaultHost();
+                const info = await window.kokiAPI.getAppVersion();
+                document.getElementById('versionLine').textContent =
+                    `集計システム 子機 v${info.version}`;
+            } catch {
+                document.getElementById('versionLine').textContent = '集計システム 子機';
+            }
         }
 
         async function connect(fullscreen) {

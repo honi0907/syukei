@@ -139,6 +139,13 @@
     color: #495057;
 }
 
+.address-hint {
+    margin: 0 0 10px;
+    font-size: 0.75rem;
+    color: #6c757d;
+    line-height: 1.45;
+}
+
 .address-line {
     display: grid;
     grid-template-columns: 52px 1fr;
