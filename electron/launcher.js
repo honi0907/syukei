@@ -101,4 +101,106 @@ window.launcherAPI.onServerStatus((payload) => {
     }
 });
 
+const updateStatusEl = document.getElementById('updateStatus');
+const installUpdateBtn = document.getElementById('installUpdateBtn');
+const updateProgressWrap = document.getElementById('updateProgressWrap');
+const updateProgressBar = document.getElementById('updateProgressBar');
+const updateProgressText = document.getElementById('updateProgressText');
+const checkUpdateBtn = document.getElementById('checkUpdateBtn');
+const launcherVersionEl = document.getElementById('launcherVersion');
+
+function setInstallVisible(visible) {
+    if (installUpdateBtn) {
+        installUpdateBtn.hidden = !visible;
+    }
+}
+
+function resetProgressUi() {
+    if (updateProgressWrap) {
+        updateProgressWrap.hidden = true;
+    }
+    if (updateProgressBar) {
+        updateProgressBar.style.width = '0%';
+    }
+    if (updateProgressText) {
+        updateProgressText.textContent = '0%';
+    }
+}
+
+async function initLauncherVersion() {
+    if (!launcherVersionEl || !window.launcherAPI?.getAppVersion) {
+        return;
+    }
+    try {
+        const info = await window.launcherAPI.getAppVersion();
+        launcherVersionEl.textContent = `${info.name || '集計システム 親機'} v${info.version}`;
+    } catch {
+        launcherVersionEl.textContent = 'バージョンを取得できませんでした';
+    }
+}
+
+checkUpdateBtn?.addEventListener('click', async () => {
+    if (!window.launcherAPI?.checkForUpdate) {
+        updateStatusEl.textContent = 'この環境ではアプリ内更新は利用できません。';
+        return;
+    }
+
+    checkUpdateBtn.disabled = true;
+    setInstallVisible(false);
+    resetProgressUi();
+    updateStatusEl.textContent = '更新情報を確認しています…';
+
+    try {
+        const result = await window.launcherAPI.checkForUpdate();
+        if (result.status === 'update-available') {
+            updateStatusEl.textContent = `新しいバージョン v${result.latest} があります。`;
+            setInstallVisible(true);
+        } else if (result.status === 'update-not-available') {
+            updateStatusEl.textContent = '現在のバージョンは最新です。';
+        } else if (result.status === 'dev') {
+            updateStatusEl.textContent = result.message || '開発モードではアプリ内更新は利用できません。';
+        } else {
+            updateStatusEl.textContent = result.message || '更新情報を取得できませんでした。';
+        }
+    } catch {
+        updateStatusEl.textContent = '更新情報を取得できませんでした。ネットワーク接続を確認してください。';
+    } finally {
+        checkUpdateBtn.disabled = false;
+    }
+});
+
+installUpdateBtn?.addEventListener('click', async () => {
+    if (!window.launcherAPI?.installUpdate) {
+        return;
+    }
+
+    installUpdateBtn.disabled = true;
+    checkUpdateBtn.disabled = true;
+    updateStatusEl.textContent = '更新をダウンロードしています…';
+    updateProgressWrap.hidden = false;
+
+    const removeProgressListener = window.launcherAPI.onUpdateProgress?.(({ percent }) => {
+        updateProgressBar.style.width = `${percent}%`;
+        updateProgressText.textContent = `${percent}%`;
+    });
+
+    try {
+        const result = await window.launcherAPI.installUpdate();
+        if (result?.ok) {
+            updateStatusEl.textContent = 'インストールを開始しました。アプリを終了します…';
+        } else {
+            updateStatusEl.textContent = result?.error || '更新のインストールに失敗しました。';
+            installUpdateBtn.disabled = false;
+            checkUpdateBtn.disabled = false;
+        }
+    } catch {
+        updateStatusEl.textContent = '更新のインストールに失敗しました。';
+        installUpdateBtn.disabled = false;
+        checkUpdateBtn.disabled = false;
+    } finally {
+        removeProgressListener?.();
+    }
+});
+
+initLauncherVersion();
 setUiState('stopped');

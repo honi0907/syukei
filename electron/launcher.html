@@ -43,9 +43,29 @@
                         親機点数画面（フルスクリーン）
                     </button>
                 </div>
-                <p class="launcher-note">点数画面＝得点発表（/ranking）。設定は親機の「設定…」から。</p>
+                <p class="launcher-note">点数画面＝得点発表（/ranking）。見た目の設定は親機の「設定…」から。アプリ更新は下の「アプリ更新」。</p>
             </section>
         </div>
+
+        <section class="launcher-update-section">
+            <div class="launcher-update-header">
+                <h2>アプリ更新</h2>
+                <p id="launcherVersion" class="launcher-version-line">バージョン —</p>
+            </div>
+            <button type="button" id="checkUpdateBtn" class="btn btn-secondary btn-full">
+                更新を確認
+            </button>
+            <p id="updateStatus" class="launcher-update-status"></p>
+            <button type="button" id="installUpdateBtn" class="btn btn-success btn-full" hidden>
+                更新をダウンロードして再起動
+            </button>
+            <div id="updateProgressWrap" class="launcher-update-progress-wrap" hidden>
+                <div class="launcher-update-progress-track">
+                    <div id="updateProgressBar" class="launcher-update-progress-bar"></div>
+                </div>
+                <p id="updateProgressText" class="launcher-update-progress-text">0%</p>
+            </div>
+        </section>
 
         <section id="addressSection" class="launcher-address-section" hidden>
             <h2>接続アドレス</h2>

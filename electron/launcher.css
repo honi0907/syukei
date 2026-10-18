@@ -110,6 +110,72 @@
     line-height: 1.45;
 }
 
+.launcher-update-section {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    background: #f8f9fa;
+}
+
+.launcher-update-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px 16px;
+    margin-bottom: 10px;
+}
+
+.launcher-update-header h2 {
+    margin: 0;
+    font-size: 1rem;
+    color: #2c3e50;
+}
+
+.launcher-version-line {
+    margin: 0;
+    font-size: 0.82rem;
+    color: #6c757d;
+}
+
+.launcher-update-status {
+    margin: 8px 0 0;
+    font-size: 0.82rem;
+    color: #495057;
+    line-height: 1.45;
+    min-height: 1.2em;
+}
+
+.launcher-update-section .btn-success {
+    margin-top: 8px;
+}
+
+.launcher-update-progress-wrap {
+    margin-top: 10px;
+}
+
+.launcher-update-progress-track {
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.launcher-update-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #28a745, #20c997);
+    transition: width 0.15s ease;
+}
+
+.launcher-update-progress-text {
+    margin: 4px 0 0;
+    font-size: 0.78rem;
+    color: #868e96;
+    text-align: right;
+}
+
 .launcher-address-section {
     margin-top: 18px;
     padding-top: 16px;

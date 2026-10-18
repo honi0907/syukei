@@ -1,7 +1,3 @@
-const { contextBridge, ipcRenderer } = require('electron');
-const { createUpdateApi } = require('./preload-update-api');
+const { contextBridge } = require('electron');
 
-contextBridge.exposeInMainWorld('syukeiDesktop', {
-    getDesktopVersion: () => ipcRenderer.invoke('app:version'),
-    ...createUpdateApi()
-});
+contextBridge.exposeInMainWorld('syukeiDesktop', {});

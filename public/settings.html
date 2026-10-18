@@ -21,7 +21,6 @@
                 <button type="button" class="settings-nav-item" data-panel="digit-style">数字の見た目</button>
                 <button type="button" class="settings-nav-item" data-panel="team-style">チーム名の見た目</button>
                 <button type="button" class="settings-nav-item" data-panel="font">フォント</button>
-                <button type="button" class="settings-nav-item" data-panel="app">バージョン</button>
             </nav>
             <p class="settings-sidebar-note">変更は開いている得点発表画面に即時反映されます。</p>
         </aside>
@@ -178,35 +177,6 @@
                     <select id="fontSelect" onchange="changeFont()"></select>
                     <div class="font-preview" id="fontPreview">
                         <div class="preview-text">プレビュー Preview 123</div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="panel-app" class="settings-panel">
-                <header class="settings-panel-header">
-                    <h2>バージョン</h2>
-                    <p>アプリのバージョン確認と更新</p>
-                </header>
-
-                <div class="settings-field">
-                    <label>サーバー（集計システム）</label>
-                    <div id="appVersion" class="settings-version-line" data-version="">—</div>
-                </div>
-                <div class="settings-field">
-                    <label>デスクトップアプリ</label>
-                    <div id="desktopVersion" class="settings-version-line">—</div>
-                </div>
-                <div class="settings-field">
-                    <button type="button" id="checkUpdateBtn" class="btn btn-primary">更新を確認</button>
-                    <p id="updateStatus" class="settings-update-status"></p>
-                    <button type="button" id="installUpdateBtn" class="btn btn-success btn-full settings-install-btn" hidden>
-                        更新をダウンロードして再起動
-                    </button>
-                    <div id="updateProgressWrap" class="settings-update-progress-wrap" hidden>
-                        <div class="settings-update-progress-track">
-                            <div id="updateProgressBar" class="settings-update-progress-bar"></div>
-                        </div>
-                        <p id="updateProgressText" class="settings-update-progress-text">0%</p>
                     </div>
                 </div>
             </section>
