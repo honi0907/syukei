@@ -10,7 +10,12 @@ const server = http.createServer(app);
 const io = socketIo(server);
 
 const PORT = 5555;
-const pkg = require('./package.json');
+let pkg = { name: 'syukei-system', version: '0.0.0' };
+try {
+    pkg = require('./package.json');
+} catch {
+    pkg.version = process.env.SYUKEI_APP_VERSION || pkg.version;
+}
 const GITHUB_RELEASES_URL = 'https://github.com/honi0907/syukei/releases/latest';
 
 // チーム名をファイルから読み込み

@@ -18,6 +18,7 @@
   "asar": true,
   "asarUnpack": [
     "server.js",
+    "package.json",
     "public/**/*",
     "teamname.txt",
     "node_modules/**/*"

@@ -231,6 +231,7 @@ function startServerProcess() {
         if (app.isPackaged) {
             try {
                 process.chdir(appRoot);
+                process.env.SYUKEI_APP_VERSION = app.getVersion();
                 const serverModule = require(serverScript);
                 serverModule.startServer();
                 serverProcess = { inProcess: true, server: serverModule.server };
