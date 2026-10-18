@@ -14,6 +14,10 @@
         input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 2px solid #dee2e6; border-radius: 8px; font-size: 1rem; margin-bottom: 12px; }
         .btn-row { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
         .version { margin-top: 16px; font-size: 0.78rem; color: #868e96; text-align: center; }
+        .update-box { margin-top: 14px; padding-top: 14px; border-top: 1px solid #e9ecef; }
+        .update-box p { margin: 0 0 8px; font-size: 0.82rem; color: #495057; min-height: 1.2em; }
+        .update-progress { height: 6px; background: #e9ecef; border-radius: 999px; overflow: hidden; margin-top: 8px; }
+        .update-progress-bar { height: 100%; width: 0%; background: #28a745; transition: width 0.15s ease; }
         #status { min-height: 1.2em; font-size: 0.85rem; color: #dc3545; margin-bottom: 8px; }
     </style>
 </head>
@@ -29,6 +33,14 @@
             <button type="button" class="btn btn-warning btn-full" id="connectFsBtn">フルスクリーンで接続</button>
         </div>
         <div class="version" id="versionLine">バージョン —</div>
+        <div class="update-box">
+            <button type="button" class="btn btn-secondary btn-full" id="checkUpdateBtn">更新を確認</button>
+            <p id="updateStatus"></p>
+            <button type="button" class="btn btn-success btn-full" id="installUpdateBtn" hidden>更新をダウンロードして再起動</button>
+            <div id="updateProgressWrap" hidden>
+                <div class="update-progress"><div class="update-progress-bar" id="updateProgressBar"></div></div>
+            </div>
+        </div>
     </div>
     <script>
         const hostInput = document.getElementById('host');
@@ -57,6 +69,65 @@
 
         connectBtn.addEventListener('click', () => connect(false));
         connectFsBtn.addEventListener('click', () => connect(true));
+
+        const updateStatusEl = document.getElementById('updateStatus');
+        const installUpdateBtn = document.getElementById('installUpdateBtn');
+        const updateProgressWrap = document.getElementById('updateProgressWrap');
+        const updateProgressBar = document.getElementById('updateProgressBar');
+        const checkUpdateBtn = document.getElementById('checkUpdateBtn');
+
+        checkUpdateBtn?.addEventListener('click', async () => {
+            if (!window.kokiAPI?.checkForUpdate) {
+                updateStatusEl.textContent = 'この環境ではアプリ内更新は利用できません。';
+                return;
+            }
+            checkUpdateBtn.disabled = true;
+            installUpdateBtn.hidden = true;
+            updateProgressWrap.hidden = true;
+            updateStatusEl.textContent = '更新情報を確認しています…';
+            try {
+                const result = await window.kokiAPI.checkForUpdate();
+                if (result.status === 'update-available') {
+                    updateStatusEl.textContent = `v${result.latest} が利用可能です。`;
+                    installUpdateBtn.hidden = false;
+                } else if (result.status === 'update-not-available') {
+                    updateStatusEl.textContent = '現在のバージョンは最新です。';
+                } else {
+                    updateStatusEl.textContent = result.message || '更新を確認できませんでした。';
+                }
+            } catch {
+                updateStatusEl.textContent = '更新情報を取得できませんでした。';
+            } finally {
+                checkUpdateBtn.disabled = false;
+            }
+        });
+
+        installUpdateBtn?.addEventListener('click', async () => {
+            installUpdateBtn.disabled = true;
+            checkUpdateBtn.disabled = true;
+            updateStatusEl.textContent = 'ダウンロード中…';
+            updateProgressWrap.hidden = false;
+            const removeListener = window.kokiAPI.onUpdateProgress?.(({ percent }) => {
+                updateProgressBar.style.width = `${percent}%`;
+            });
+            try {
+                const result = await window.kokiAPI.installUpdate();
+                if (result?.ok) {
+                    updateStatusEl.textContent = 'インストール中…アプリを終了します。';
+                } else {
+                    updateStatusEl.textContent = result?.error || '更新に失敗しました。';
+                    installUpdateBtn.disabled = false;
+                    checkUpdateBtn.disabled = false;
+                }
+            } catch {
+                updateStatusEl.textContent = '更新に失敗しました。';
+                installUpdateBtn.disabled = false;
+                checkUpdateBtn.disabled = false;
+            } finally {
+                removeListener?.();
+            }
+        });
+
         init();
     </script>
 </body>

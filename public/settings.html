@@ -199,9 +199,15 @@
                 <div class="settings-field">
                     <button type="button" id="checkUpdateBtn" class="btn btn-primary">更新を確認</button>
                     <p id="updateStatus" class="settings-update-status"></p>
-                    <button type="button" id="openReleaseBtn" class="btn btn-secondary btn-full settings-release-btn" hidden>
-                        ダウンロードページを開く
+                    <button type="button" id="installUpdateBtn" class="btn btn-success btn-full settings-install-btn" hidden>
+                        更新をダウンロードして再起動
                     </button>
+                    <div id="updateProgressWrap" class="settings-update-progress-wrap" hidden>
+                        <div class="settings-update-progress-track">
+                            <div id="updateProgressBar" class="settings-update-progress-bar"></div>
+                        </div>
+                        <p id="updateProgressText" class="settings-update-progress-text">0%</p>
+                    </div>
                 </div>
             </section>
         </main>

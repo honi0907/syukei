@@ -347,24 +347,6 @@
         });
     }
 
-    const GITHUB_RELEASES_API = 'https://api.github.com/repos/honi0907/syukei/releases/latest';
-
-    function normalizeVersion(version) {
-        return String(version || '').replace(/^v/i, '').trim();
-    }
-
-    function compareVersion(a, b) {
-        const pa = normalizeVersion(a).split('.').map((n) => parseInt(n, 10) || 0);
-        const pb = normalizeVersion(b).split('.').map((n) => parseInt(n, 10) || 0);
-        for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
-            const diff = (pa[i] || 0) - (pb[i] || 0);
-            if (diff !== 0) {
-                return diff;
-            }
-        }
-        return 0;
-    }
-
     async function initAppInfo() {
         const appVersionEl = document.getElementById('appVersion');
         if (!appVersionEl) {
@@ -373,15 +355,17 @@
 
         const desktopVersionEl = document.getElementById('desktopVersion');
         const updateStatusEl = document.getElementById('updateStatus');
-        const openReleaseBtn = document.getElementById('openReleaseBtn');
-        let releasesUrl = 'https://github.com/honi0907/syukei/releases/latest';
+        const installUpdateBtn = document.getElementById('installUpdateBtn');
+        const updateProgressWrap = document.getElementById('updateProgressWrap');
+        const updateProgressBar = document.getElementById('updateProgressBar');
+        const updateProgressText = document.getElementById('updateProgressText');
+        const hasDesktopUpdater = Boolean(window.syukeiDesktop?.checkForUpdate);
 
         try {
             const response = await fetch('/api/version', { cache: 'no-store' });
             const data = await response.json();
             appVersionEl.textContent = `v${data.version}`;
             appVersionEl.dataset.version = data.version;
-            releasesUrl = data.releasesUrl || releasesUrl;
         } catch {
             appVersionEl.textContent = '取得できませんでした';
         }
@@ -390,6 +374,7 @@
             try {
                 const desktop = await window.syukeiDesktop.getDesktopVersion();
                 desktopVersionEl.textContent = `${desktop.name || 'デスクトップ'} v${desktop.version}`;
+                appVersionEl.dataset.desktopVersion = desktop.version;
             } catch {
                 desktopVersionEl.textContent = '取得できませんでした';
             }
@@ -397,45 +382,108 @@
             desktopVersionEl.textContent = 'ブラウザ表示';
         }
 
+        function setInstallVisible(visible) {
+            if (installUpdateBtn) {
+                installUpdateBtn.hidden = !visible;
+            }
+        }
+
+        function resetProgressUi() {
+            if (updateProgressWrap) {
+                updateProgressWrap.hidden = true;
+            }
+            if (updateProgressBar) {
+                updateProgressBar.style.width = '0%';
+            }
+            if (updateProgressText) {
+                updateProgressText.textContent = '0%';
+            }
+        }
+
         async function checkUpdates() {
-            const current = appVersionEl.dataset.version;
             const btn = document.getElementById('checkUpdateBtn');
-            if (!btn || !current) {
+            if (!btn) {
                 return;
             }
 
             btn.disabled = true;
             updateStatusEl.textContent = '更新情報を確認しています…';
-            openReleaseBtn.hidden = true;
+            setInstallVisible(false);
+            resetProgressUi();
 
             try {
-                const response = await fetch(GITHUB_RELEASES_API, {
-                    headers: { Accept: 'application/vnd.github+json' }
-                });
-                if (!response.ok) {
-                    throw new Error('GitHub API error');
-                }
-                const release = await response.json();
-                const latest = normalizeVersion(release.tag_name);
-                if (compareVersion(latest, current) > 0) {
-                    updateStatusEl.textContent = `新しいバージョン v${latest} が公開されています。`;
-                    openReleaseBtn.hidden = false;
+                if (hasDesktopUpdater) {
+                    const result = await window.syukeiDesktop.checkForUpdate();
+                    if (result.status === 'update-available') {
+                        updateStatusEl.textContent = `新しいバージョン v${result.latest} があります。「更新をダウンロードして再起動」で自動インストールできます。`;
+                        setInstallVisible(true);
+                    } else if (result.status === 'update-not-available') {
+                        updateStatusEl.textContent = '現在のバージョンは最新です。';
+                    } else if (result.status === 'dev') {
+                        updateStatusEl.textContent = result.message || '開発モードではアプリ内更新は利用できません。';
+                    } else {
+                        updateStatusEl.textContent = result.message || '更新情報を取得できませんでした。';
+                    }
                 } else {
-                    updateStatusEl.textContent = '現在のバージョンは最新です。';
+                    updateStatusEl.textContent =
+                        'アプリ内更新はインストール版のデスクトップアプリから利用できます。';
                 }
             } catch {
                 updateStatusEl.textContent =
                     '更新情報を取得できませんでした。ネットワーク接続を確認してください。';
-                openReleaseBtn.hidden = false;
             } finally {
                 btn.disabled = false;
             }
         }
 
-        openReleaseBtn.addEventListener('click', () => {
-            window.open(releasesUrl, '_blank');
-        });
+        async function installUpdate() {
+            if (!window.syukeiDesktop?.installUpdate) {
+                return;
+            }
+
+            const checkBtn = document.getElementById('checkUpdateBtn');
+            installUpdateBtn.disabled = true;
+            if (checkBtn) {
+                checkBtn.disabled = true;
+            }
+            updateStatusEl.textContent = '更新をダウンロードしています…';
+            if (updateProgressWrap) {
+                updateProgressWrap.hidden = false;
+            }
+
+            const removeProgressListener = window.syukeiDesktop.onUpdateProgress?.(({ percent }) => {
+                if (updateProgressBar) {
+                    updateProgressBar.style.width = `${percent}%`;
+                }
+                if (updateProgressText) {
+                    updateProgressText.textContent = `${percent}%`;
+                }
+            });
+
+            try {
+                const result = await window.syukeiDesktop.installUpdate();
+                if (result?.ok) {
+                    updateStatusEl.textContent = 'インストールを開始しました。アプリを終了します…';
+                } else {
+                    updateStatusEl.textContent = result?.error || '更新のインストールに失敗しました。';
+                    installUpdateBtn.disabled = false;
+                    if (checkBtn) {
+                        checkBtn.disabled = false;
+                    }
+                }
+            } catch {
+                updateStatusEl.textContent = '更新のインストールに失敗しました。';
+                installUpdateBtn.disabled = false;
+                if (checkBtn) {
+                    checkBtn.disabled = false;
+                }
+            } finally {
+                removeProgressListener?.();
+            }
+        }
+
         document.getElementById('checkUpdateBtn')?.addEventListener('click', checkUpdates);
+        installUpdateBtn?.addEventListener('click', installUpdate);
     }
 
     function bindControls() {

@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
+const { registerAppUpdateIpc } = require('../app-updater');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -132,6 +133,8 @@ ipcMain.handle('app:version', () => ({
     version: app.getVersion(),
     name: app.getName()
 }));
+
+registerAppUpdateIpc(ipcMain, app, 'child');
 
 app.whenReady().then(() => {
     createConnectWindow();

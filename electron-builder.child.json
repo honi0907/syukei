@@ -6,6 +6,8 @@
   },
   "files": [
     "electron/koki/**/*",
+    "electron/app-updater.js",
+    "electron/preload-update-api.js",
     "public/styles.css",
     "package.json"
   ],
@@ -21,7 +23,7 @@
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
-    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "artifactName": "syukei-child-setup-${version}.${ext}",
     "guid": "B2C3D4E5-F6A7-8901-BCDE-F12345678901"
   },
   "publish": {
