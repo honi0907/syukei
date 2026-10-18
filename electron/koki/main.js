@@ -1,9 +1,8 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, net } = require('electron');
 const { registerAppUpdateIpc } = require('../app-updater');
 const { parseServerHost } = require('../parse-server-host');
 const path = require('path');
 const fs = require('fs');
-const http = require('http');
 
 const PORT = 5555;
 const CONFIG_FILE = 'server-host.txt';
@@ -32,15 +31,35 @@ function saveHost(host) {
 
 function pingServerOnce(host) {
     return new Promise((resolve) => {
-        const req = http.get(`http://${host}:${PORT}/client`, (res) => {
-            res.resume();
-            resolve(res.statusCode === 200);
+        const url = `http://${host}:${PORT}/client`;
+        const request = net.request({ method: 'GET', url });
+        let settled = false;
+
+        const finish = (ok) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            resolve(ok);
+        };
+
+        request.on('response', (response) => {
+            response.on('data', () => {});
+            response.on('end', () => {
+                finish(response.statusCode === 200);
+            });
         });
-        req.on('error', () => resolve(false));
-        req.setTimeout(3000, () => {
-            req.destroy();
-            resolve(false);
-        });
+        request.on('error', () => finish(false));
+        request.end();
+
+        setTimeout(() => {
+            try {
+                request.abort();
+            } catch {
+                /* ignore */
+            }
+            finish(false);
+        }, 4000);
     });
 }
 
@@ -75,7 +94,8 @@ function createConnectWindow() {
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            sandbox: false
         }
     });
 
@@ -86,7 +106,11 @@ function createConnectWindow() {
 }
 
 function openClientWindow(host, fullscreen) {
-    const url = `http://${host}:${PORT}/client`;
+    const params = new URLSearchParams({
+        serverHost: host,
+        electron: '1'
+    });
+    const url = `http://${host}:${PORT}/client?${params.toString()}`;
 
     if (clientWindow && !clientWindow.isDestroyed()) {
         clientWindow.loadURL(url);

@@ -6,6 +6,7 @@
     <title>子機 - 点数入力</title>
     <link rel="stylesheet" href="styles.css">
     <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/server-host.js"></script>
 </head>
 <body class="client-page">
     <!-- ログイン画面 -->
@@ -111,23 +112,44 @@
 
         // ページ読み込み時に保存された値を復元
         window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
             const savedClientName = localStorage.getItem('clientName');
             const savedServerHost = localStorage.getItem('serverHost');
-            
+
+            let host = '';
+            if (params.get('serverHost')) {
+                host = normalizeServerHost(params.get('serverHost'));
+            } else if (savedServerHost) {
+                host = normalizeServerHost(savedServerHost);
+            } else if (window.location.hostname) {
+                host = normalizeServerHost(window.location.hostname);
+            }
+            if (!host) {
+                host = 'localhost';
+            }
+
             if (savedClientName) {
                 document.getElementById('clientName').value = savedClientName;
             }
-            if (savedServerHost) {
-                document.getElementById('serverHost').value = savedServerHost;
+            document.getElementById('serverHost').value = host;
+            localStorage.setItem('serverHost', host);
+
+            if (params.get('electron') === '1' && savedClientName) {
+                setTimeout(() => login(), 300);
             }
         });
 
         function login() {
             const name = document.getElementById('clientName').value.trim();
-            const host = document.getElementById('serverHost').value.trim();
+            const host = normalizeServerHost(document.getElementById('serverHost').value.trim());
+            document.getElementById('serverHost').value = host;
             
             if (!name) {
                 showLoginStatus('子機名を入力してください', 'error');
+                return;
+            }
+            if (!host) {
+                showLoginStatus('サーバーアドレスを入力してください', 'error');
                 return;
             }
 
