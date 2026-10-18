@@ -41,6 +41,8 @@ npm run dist:all
 
 リリース: [GitHub Releases](https://github.com/honi0907/syukei/releases)
 
+同一PCに親機・子機の両方を入れる場合、**別フォルダ**にインストールしてください（v1.0.3以降は既定で `syukei-parent` / `syukei-client` に分かれます）。以前の `syukei-system` フォルダはアンインストールしてから入れ直すと安全です。
+
 設定画面の「バージョン」から更新確認できます。
 
 ### ブラウザのみ（従来）

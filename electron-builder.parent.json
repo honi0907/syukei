@@ -13,6 +13,7 @@
     "node_modules/**/*"
   ],
   "extraMetadata": {
+    "name": "syukei-parent",
     "main": "electron/main.js"
   },
   "asar": true,
@@ -30,7 +31,8 @@
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
-    "artifactName": "${productName}-Setup-${version}.${ext}"
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "guid": "A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
   },
   "publish": {
     "provider": "github",

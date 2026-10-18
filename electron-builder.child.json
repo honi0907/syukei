@@ -10,6 +10,7 @@
     "package.json"
   ],
   "extraMetadata": {
+    "name": "syukei-client",
     "main": "electron/koki/main.js"
   },
   "asar": true,
@@ -20,7 +21,8 @@
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
-    "artifactName": "${productName}-Setup-${version}.${ext}"
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "guid": "B2C3D4E5-F6A7-8901-BCDE-F12345678901"
   },
   "publish": {
     "provider": "github",
