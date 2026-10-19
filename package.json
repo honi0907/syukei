@@ -1,6 +1,6 @@
 {
   "name": "syukei-system",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "親機・子機スコア集計システム",
   "main": "electron/main.js",
   "repository": {
@@ -12,8 +12,8 @@
     "dev": "nodemon server.js",
     "electron": "electron .",
     "electron:child": "electron electron/koki/main.js",
-    "dist:parent": "electron-builder --config electron-builder.parent.json",
-    "dist:child": "electron-builder --config electron-builder.child.json",
+    "dist:parent": "npm run icons && electron-builder --config electron-builder.parent.json",
+    "dist:child": "npm run icons && electron-builder --config electron-builder.child.json",
     "dist:all": "npm run dist:parent && npm run dist:child",
     "icons": "node scripts/build-icons.js"
   },
