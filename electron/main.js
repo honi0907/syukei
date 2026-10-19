@@ -483,6 +483,10 @@ ipcMain.handle('app:version', () => ({
 
 registerAppUpdateIpc(ipcMain, app, 'parent');
 
+if (process.platform === 'win32') {
+    app.setAppUserModelId('jp.syukei.parent');
+}
+
 app.whenReady().then(() => {
     createLauncherWindow();
 

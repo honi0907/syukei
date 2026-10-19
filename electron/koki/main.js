@@ -193,6 +193,10 @@ ipcMain.handle('app:version', () => ({
 
 registerAppUpdateIpc(ipcMain, app, 'child');
 
+if (process.platform === 'win32') {
+    app.setAppUserModelId('jp.syukei.client');
+}
+
 app.whenReady().then(() => {
     createConnectWindow();
     app.on('activate', () => {

@@ -2,6 +2,7 @@
   "appId": "jp.syukei.parent",
   "productName": "集計システム 親機",
   "icon": "build/icon.ico",
+  "afterPack": "scripts/after-pack.js",
   "directories": {
     "output": "dist/parent"
   },
@@ -34,7 +35,9 @@
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "artifactName": "syukei-parent-setup-${version}.${ext}",
-    "guid": "A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
+    "guid": "A1B2C3D4-E5F6-7890-ABCD-EF1234567890",
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico"
   },
   "publish": {
     "provider": "github",

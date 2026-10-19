@@ -2,6 +2,7 @@
   "appId": "jp.syukei.client",
   "productName": "集計システム 子機",
   "icon": "build/icon.ico",
+  "afterPack": "scripts/after-pack.js",
   "directories": {
     "output": "dist/child"
   },
@@ -30,7 +31,9 @@
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "artifactName": "syukei-child-setup-${version}.${ext}",
-    "guid": "B2C3D4E5-F6A7-8901-BCDE-F12345678901"
+    "guid": "B2C3D4E5-F6A7-8901-BCDE-F12345678901",
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico"
   },
   "publish": {
     "provider": "github",
