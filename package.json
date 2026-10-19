@@ -1,6 +1,6 @@
 {
   "name": "syukei-system",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "親機・子機スコア集計システム",
   "main": "electron/main.js",
   "repository": {
@@ -14,9 +14,15 @@
     "electron:child": "electron electron/koki/main.js",
     "dist:parent": "electron-builder --config electron-builder.parent.json",
     "dist:child": "electron-builder --config electron-builder.child.json",
-    "dist:all": "npm run dist:parent && npm run dist:child"
+    "dist:all": "npm run dist:parent && npm run dist:child",
+    "icons": "node scripts/build-icons.js"
   },
-  "keywords": ["scoring", "websocket", "realtime", "electron"],
+  "keywords": [
+    "scoring",
+    "websocket",
+    "realtime",
+    "electron"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -26,6 +32,7 @@
   "devDependencies": {
     "electron": "^35.0.0",
     "electron-builder": "^25.1.8",
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "png-to-ico": "^2.1.8"
   }
 }

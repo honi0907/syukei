@@ -1,6 +1,7 @@
 {
   "appId": "jp.syukei.parent",
   "productName": "集計システム 親機",
+  "icon": "build/icon.ico",
   "directories": {
     "output": "dist/parent"
   },
@@ -26,7 +27,8 @@
   ],
   "win": {
     "target": ["nsis"],
-    "signAndEditExecutable": false
+    "signAndEditExecutable": false,
+    "icon": "build/icon.ico"
   },
   "nsis": {
     "oneClick": false,

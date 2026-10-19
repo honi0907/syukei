@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, net } = require('electron');
 const { registerAppUpdateIpc } = require('../app-updater');
 const { parseServerHost } = require('../parse-server-host');
+const { getBrowserWindowIcon } = require('../app-icon');
 const path = require('path');
 const fs = require('fs');
 
@@ -83,14 +84,20 @@ async function pingServer(hostInput) {
     return { ok: false };
 }
 
+function browserWindowIconOptions() {
+    const icon = getBrowserWindowIcon();
+    return icon ? { icon } : {};
+}
+
 function createConnectWindow() {
     connectWindow = new BrowserWindow({
         width: 520,
-        height: 400,
+        height: 480,
         minWidth: 440,
         minHeight: 360,
         title: '集計システム 子機',
         autoHideMenuBar: true,
+        ...browserWindowIconOptions(),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -128,6 +135,7 @@ function openClientWindow(host, fullscreen) {
         show: false,
         title: '子機 - 点数入力',
         autoHideMenuBar: true,
+        ...browserWindowIconOptions(),
         webPreferences: {
             contextIsolation: true,
             nodeIntegration: false

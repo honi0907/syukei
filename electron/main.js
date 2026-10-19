@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { registerAppUpdateIpc } = require('./app-updater');
+const { getBrowserWindowIcon } = require('./app-icon');
 const path = require('path');
 const http = require('http');
 const net = require('net');
@@ -329,6 +330,11 @@ async function stopServerProcess() {
     return { ok: true };
 }
 
+function browserWindowIconOptions() {
+    const icon = getBrowserWindowIcon();
+    return icon ? { icon } : {};
+}
+
 function createLauncherWindow() {
     launcherWindow = new BrowserWindow({
         width: 960,
@@ -337,6 +343,7 @@ function createLauncherWindow() {
         minHeight: 660,
         title: '集計システム ランチャー',
         autoHideMenuBar: true,
+        ...browserWindowIconOptions(),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -427,6 +434,7 @@ function openAppWindow(kind, options = {}) {
         show: false,
         title: config.title,
         autoHideMenuBar: true,
+        ...browserWindowIconOptions(),
         webPreferences: {
             preload: config.preload,
             contextIsolation: true,

@@ -1,12 +1,16 @@
 {
   "appId": "jp.syukei.client",
   "productName": "集計システム 子機",
+  "icon": "build/icon.ico",
   "directories": {
     "output": "dist/child"
   },
   "files": [
     "electron/koki/**/*",
     "electron/app-updater.js",
+    "electron/app-icon.js",
+    "electron/icon.png",
+    "electron/icon.ico",
     "electron/parse-server-host.js",
     "electron/preload-update-api.js",
     "public/styles.css",
@@ -19,7 +23,8 @@
   "asar": true,
   "win": {
     "target": ["nsis"],
-    "signAndEditExecutable": false
+    "signAndEditExecutable": false,
+    "icon": "build/icon.ico"
   },
   "nsis": {
     "oneClick": false,
