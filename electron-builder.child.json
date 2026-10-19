@@ -10,6 +10,7 @@
     "electron/koki/**/*",
     "electron/app-updater.js",
     "electron/app-icon.js",
+    "electron/repair-desktop-shortcut.js",
     "electron/icon.png",
     "electron/icon.ico",
     "electron/parse-server-host.js",
@@ -33,7 +34,8 @@
     "artifactName": "syukei-child-setup-${version}.${ext}",
     "guid": "B2C3D4E5-F6A7-8901-BCDE-F12345678901",
     "installerIcon": "build/icon.ico",
-    "uninstallerIcon": "build/icon.ico"
+    "uninstallerIcon": "build/icon.ico",
+    "include": "build/installer.nsh"
   },
   "publish": {
     "provider": "github",

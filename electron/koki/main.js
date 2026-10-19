@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, net } = require('electron');
 const { registerAppUpdateIpc } = require('../app-updater');
 const { parseServerHost } = require('../parse-server-host');
 const { getBrowserWindowIcon } = require('../app-icon');
+const { repairDesktopShortcutIfPresent } = require('../repair-desktop-shortcut');
 const path = require('path');
 const fs = require('fs');
 
@@ -198,6 +199,7 @@ if (process.platform === 'win32') {
 }
 
 app.whenReady().then(() => {
+    repairDesktopShortcutIfPresent(app);
     createConnectWindow();
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
