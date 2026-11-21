@@ -57,6 +57,9 @@
                     <button class="btn btn-primary btn-full" onclick="openSettings()">
                         設定…
                     </button>
+                    <button class="btn btn-primary btn-full" onclick="openScoresTable()">
+                        点数一覧（CSV）
+                    </button>
                 </div>
             </div>
         </div>
@@ -103,27 +106,21 @@
             </div>
             
             <div class="round-card">
-                <h3>チーム選択</h3>
-                <div class="round-selector-buttons">
-                    <button type="button" class="btn btn-round" onclick="switchRound(1)">A</button>
-                    <button type="button" class="btn btn-round" onclick="switchRound(2)">B</button>
-                    <button type="button" class="btn btn-round" onclick="switchRound(3)">C</button>
-                    <button type="button" class="btn btn-round" onclick="switchRound(4)">D</button>
-                    <button type="button" class="btn btn-round" onclick="switchRound(5)">E</button>
+                <h3>セット選択</h3>
+                <div class="round-selector-buttons set-selector-buttons" id="setSelectorButtons"></div>
+                <div class="current-round-display">
+                    セット: <span id="currentSetLabel">セット１</span>
                 </div>
+
+                <h3 class="round-card-subtitle">チーム選択</h3>
+                <div class="round-selector-buttons team-selector-buttons" id="teamSelectorButtons"></div>
                 <div class="current-round-display">
                     現在: <span id="currentRoundLabel">チームA</span>
                 </div>
                 
                 <div class="round-scores-summary">
                     <h4>各チーム得点</h4>
-                    <div class="round-score-list" id="roundScoreList">
-                        <div class="round-score-item">A: <span id="round1Total">0</span>点</div>
-                        <div class="round-score-item">B: <span id="round2Total">0</span>点</div>
-                        <div class="round-score-item">C: <span id="round3Total">0</span>点</div>
-                        <div class="round-score-item">D: <span id="round4Total">0</span>点</div>
-                        <div class="round-score-item">E: <span id="round5Total">0</span>点</div>
-                    </div>
+                    <div class="round-score-list" id="roundScoreList"></div>
                 </div>
             </div>
         </div>
@@ -133,7 +130,12 @@
         const socket = io();
         let clients = [];
         let currentRound = 1;
-        let teamNames = ['A', 'B', 'C', 'D', 'E']; // デフォルト（5チーム）
+        let currentSet = 1;
+        const SET_INDEX_LABELS = ['セット１', 'セット２', 'セット３', 'セット４', 'セット５', 'セット６'];
+        let setNames = [...SET_INDEX_LABELS];
+        const TEAM_COUNT = 6;
+        const TEAM_FALLBACK_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
+        let teamNames = [...TEAM_FALLBACK_LABELS];
         const REMIND_PRESS_MS = 5000;
         const remindPressedClients = new Set();
         const remindPressTimers = new Map();
@@ -164,11 +166,37 @@
         }
 
         // チーム名を受信
-        socket.on('team-names', (data) => {
-            teamNames = data.teamNames;
-            console.log('チーム名受信:', teamNames);
+        function applySetAndTeamNames(data) {
+            if (Array.isArray(data.setNames)) {
+                setNames = data.setNames;
+            }
+            if (typeof data.currentSet === 'number') {
+                currentSet = data.currentSet;
+            } else if (typeof data.set === 'number') {
+                currentSet = data.set;
+            }
+            if (Array.isArray(data.teamNames)) {
+                teamNames = data.teamNames;
+            }
+            updateSetButtons();
+            updateCurrentSetLabel();
             updateRoundButtons();
             updateCurrentRoundLabel();
+        }
+
+        socket.on('team-names', (data) => {
+            console.log('チーム名受信:', data);
+            applySetAndTeamNames(data);
+        });
+
+        socket.on('set-changed', (data) => {
+            applySetAndTeamNames(data);
+            socket.emit('request-team-totals');
+            socket.emit('request-round-data', currentRound);
+        });
+
+        socket.on('current-set', (data) => {
+            applySetAndTeamNames(data);
         });
 
         socket.on('client-connected', (data) => {
@@ -191,11 +219,14 @@
         // チーム別の合計を受信
         socket.on('team-totals', (data) => {
             console.log('チーム別合計受信:', data);
-            // 各チームの合計を表示
             data.teams.forEach((team, index) => {
                 const total = team.score || 0;
-                document.getElementById(`round${index + 1}Total`).textContent = total.toLocaleString();
+                const totalEl = document.getElementById(`round${index + 1}Total`);
+                if (totalEl) {
+                    totalEl.textContent = total.toLocaleString();
+                }
             });
+            updateTeamScoreSummaryLabels();
         });
 
         socket.on('client-disconnected', (data) => {
@@ -290,6 +321,14 @@
 
         function alertServerNotRunning() {
             alert('サーバーが起動していません。ランチャーで「サーバーを起動」してから操作してください。');
+        }
+
+        async function openScoresTable() {
+            if (!(await isServerRunning())) {
+                alertServerNotRunning();
+                return;
+            }
+            window.open('/scores-table.html', '_blank');
         }
 
         async function showRanking() {
@@ -405,16 +444,68 @@
             }
         }
 
+        function teamRoundButtons() {
+            return document.querySelectorAll('#teamSelectorButtons .btn-team');
+        }
+
+        function syncRoundButtonActive() {
+            teamRoundButtons().forEach((btn) => {
+                const round = Number(btn.dataset.round);
+                btn.classList.toggle('active', round === currentRound);
+            });
+        }
+
+        function switchSet(set) {
+            if (set < 1 || set > 6) {
+                return;
+            }
+            currentSet = set;
+            updateCurrentSetLabel();
+            syncSetButtonActive();
+            socket.emit('change-set', set);
+            socket.emit('request-round-data', currentRound);
+            socket.emit('request-team-totals');
+        }
+
+        function syncSetButtonActive() {
+            document.querySelectorAll('.btn-set').forEach((btn) => {
+                const n = Number(btn.dataset.set);
+                btn.classList.toggle('active', n === currentSet);
+            });
+        }
+
+        function updateSetButtons() {
+            const wrap = document.getElementById('setSelectorButtons');
+            if (!wrap) {
+                return;
+            }
+            wrap.innerHTML = SET_INDEX_LABELS.map((label, index) => {
+                const setNum = index + 1;
+                return `<button type="button" class="btn btn-set" data-set="${setNum}" onclick="switchSet(${setNum})" title="${escapeSetLabel(setNames[index] || label)}">${escapeSetLabel(label)}</button>`;
+            }).join('');
+            syncSetButtonActive();
+        }
+
+        function escapeSetLabel(text) {
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function updateCurrentSetLabel() {
+            const label = setNames[currentSet - 1] || SET_INDEX_LABELS[currentSet - 1] || `セット${currentSet}`;
+            const el = document.getElementById('currentSetLabel');
+            if (el) {
+                el.textContent = label;
+            }
+        }
+
         function switchRound(round) {
             currentRound = round;
             updateCurrentRoundLabel();
-            
-            // アクティブボタンの切り替え
-            document.querySelectorAll('.btn-round').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            event.target.classList.add('active');
-            
+            syncRoundButtonActive();
+
             // サーバーにラウンド変更を通知
             socket.emit('change-round', round);
             
@@ -430,11 +521,50 @@
             document.getElementById('currentRoundLabel').textContent = label;
         }
         
+        function formatTeamButtonLabel(name) {
+            return (name || '').replace(/チーム/g, '').trim().substring(0, 10);
+        }
+
+        function ensureTeamUiSlots() {
+            const btnWrap = document.getElementById('teamSelectorButtons');
+            const scoreList = document.getElementById('roundScoreList');
+            if (btnWrap && btnWrap.children.length !== TEAM_COUNT) {
+                btnWrap.innerHTML = TEAM_FALLBACK_LABELS.map(
+                    (label, i) => {
+                        const round = i + 1;
+                        return `<button type="button" class="btn btn-round btn-team" data-round="${round}" onclick="switchRound(${round})">${label}</button>`;
+                    }
+                ).join('');
+            }
+            if (scoreList && scoreList.children.length !== TEAM_COUNT) {
+                scoreList.innerHTML = TEAM_FALLBACK_LABELS.map(
+                    (label, i) =>
+                        `<div class="round-score-item">${label}: <span id="round${i + 1}Total">0</span>点</div>`
+                ).join('');
+            }
+        }
+
         function updateRoundButtons() {
-            const buttons = document.querySelectorAll('.btn-round');
-            buttons.forEach((btn, index) => {
-                btn.textContent = teamNames[index].replace(/チーム/g, '').substring(0, 10);
+            ensureTeamUiSlots();
+            teamRoundButtons().forEach((btn, index) => {
+                const name = teamNames[index];
+                btn.textContent = formatTeamButtonLabel(name) || TEAM_FALLBACK_LABELS[index];
             });
+            updateTeamScoreSummaryLabels();
+            syncRoundButtonActive();
+        }
+
+        function updateTeamScoreSummaryLabels() {
+            for (let r = 1; r <= TEAM_COUNT; r += 1) {
+                const el = document.querySelector(`#roundScoreList .round-score-item:nth-child(${r})`);
+                if (!el) {
+                    continue;
+                }
+                const total = document.getElementById(`round${r}Total`);
+                const totalText = total ? total.textContent : '0';
+                const label = formatTeamButtonLabel(teamNames[r - 1]) || TEAM_FALLBACK_LABELS[r - 1];
+                el.innerHTML = `${escapeSetLabel(label)}: <span id="round${r}Total">${totalText}</span>点`;
+            }
         }
 
         // ラウンド別データを受信
@@ -449,13 +579,26 @@
             socket.emit('request-clients');
         });
 
+        socket.on('current-round', (round) => {
+            if (typeof round === 'number' && round >= 1 && round <= TEAM_COUNT) {
+                currentRound = round;
+                updateCurrentRoundLabel();
+                syncRoundButtonActive();
+            }
+        });
+
         socket.on('connect', () => {
             console.log('サーバーに接続しました');
             socket.emit('request-current-round');
+            socket.emit('request-current-set');
             socket.emit('request-team-totals');
             socket.emit('request-clients');
             socket.emit('request-team-names');
         });
+
+        ensureTeamUiSlots();
+        updateSetButtons();
+        syncRoundButtonActive();
     </script>
 </body>
 </html>

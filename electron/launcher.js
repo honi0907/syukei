@@ -3,6 +3,7 @@ const statusText = document.getElementById('statusText');
 const startServerBtn = document.getElementById('startServerBtn');
 const stopServerBtn = document.getElementById('stopServerBtn');
 const addressSection = document.getElementById('addressSection');
+const addressServerHint = document.getElementById('addressServerHint');
 const openParentBtn = document.getElementById('openParentBtn');
 const openScoreBtn = document.getElementById('openScoreBtn');
 const openScoreFullscreenBtn = document.getElementById('openScoreFullscreenBtn');
@@ -15,7 +16,10 @@ function setUiState(state) {
         startServerBtn.disabled = false;
         startServerBtn.hidden = false;
         stopServerBtn.hidden = true;
-        addressSection.hidden = true;
+        if (addressServerHint) {
+            addressServerHint.textContent =
+                'サーバーは停止中です。「サーバーを起動」後に下記 URL からアクセスできます。';
+        }
         openParentBtn.disabled = false;
         openScoreBtn.disabled = false;
         openScoreFullscreenBtn.disabled = false;
@@ -26,7 +30,9 @@ function setUiState(state) {
         statusText.textContent = 'サーバー起動中…';
         startServerBtn.disabled = true;
         stopServerBtn.hidden = true;
-        addressSection.hidden = true;
+        if (addressServerHint) {
+            addressServerHint.textContent = 'サーバー起動中…';
+        }
         openParentBtn.disabled = true;
         openScoreBtn.disabled = true;
         openScoreFullscreenBtn.disabled = true;
@@ -38,7 +44,10 @@ function setUiState(state) {
         startServerBtn.hidden = true;
         stopServerBtn.hidden = false;
         stopServerBtn.disabled = false;
-        addressSection.hidden = false;
+        if (addressServerHint) {
+            addressServerHint.textContent =
+                'サーバー稼働中。別端末からは LAN の URL をブラウザで開いてください。子機接続欄は IP または localhost。';
+        }
         openParentBtn.disabled = false;
         openScoreBtn.disabled = false;
         openScoreFullscreenBtn.disabled = false;
@@ -51,6 +60,14 @@ async function fillAddresses() {
     document.getElementById('parentLanUrl').textContent = info.urls.parentLan;
     document.getElementById('clientLocalUrl').textContent = info.urls.clientLocal;
     document.getElementById('clientLanUrl').textContent = info.urls.clientLan;
+    document.getElementById('scoresTableLocalUrl').textContent = info.urls.scoresTableLocal;
+    document.getElementById('scoresTableLanUrl').textContent = info.urls.scoresTableLan;
+    document.getElementById('viewerLocalUrl').textContent = info.urls.viewerLocal;
+    document.getElementById('viewerLanUrl').textContent = info.urls.viewerLan;
+    const lanOnly = document.getElementById('lanIpLine');
+    if (lanOnly && info.lanIp) {
+        lanOnly.textContent = info.lanIp;
+    }
 }
 
 startServerBtn.addEventListener('click', async () => {
@@ -203,4 +220,5 @@ installUpdateBtn?.addEventListener('click', async () => {
 });
 
 initLauncherVersion();
+fillAddresses();
 setUiState('stopped');

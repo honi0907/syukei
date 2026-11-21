@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>点数一覧</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="scores-table-page">
+    <header class="scores-table-header">
+        <div>
+            <h1>点数一覧</h1>
+            <p class="scores-table-lead">現在のセットの6チーム × 接続中の子機。確定した点数のみ表示します（リアルタイム更新）。</p>
+        </div>
+        <div class="scores-table-actions">
+            <button type="button" class="btn btn-primary" id="refreshBtn">更新</button>
+            <button type="button" class="btn btn-primary" id="csvBtn">CSVをダウンロード</button>
+        </div>
+    </header>
+
+    <p id="updatedAt" class="scores-table-meta">読み込み中…</p>
+
+    <div class="scores-table-wrap">
+        <table class="matrix-table" id="matrixTable">
+            <thead id="matrixHead"></thead>
+            <tbody id="matrixBody"></tbody>
+            <tfoot id="matrixFoot"></tfoot>
+        </table>
+        <p id="emptyHint" class="scores-table-empty" hidden>接続中の子機がありません。子機を接続すると一覧に表示されます。</p>
+    </div>
+
+    <script>
+        const socket = io();
+        let latestMatrix = null;
+
+        function teamHeaders(matrix) {
+            return matrix.teamNames.map((name, i) => name || `チーム${i + 1}`);
+        }
+
+        function renderMatrix(matrix) {
+            latestMatrix = matrix;
+            const head = document.getElementById('matrixHead');
+            const body = document.getElementById('matrixBody');
+            const foot = document.getElementById('matrixFoot');
+            const empty = document.getElementById('emptyHint');
+            const updated = document.getElementById('updatedAt');
+
+            const teams = teamHeaders(matrix);
+            head.innerHTML = `
+                <tr>
+                    <th>ID</th>
+                    <th>表示名</th>
+                    ${teams.map((t) => `<th>${escapeHtml(t)}</th>`).join('')}
+                    <th class="col-total">合計</th>
+                </tr>
+            `;
+
+            if (!matrix.participants.length) {
+                body.innerHTML = '';
+                foot.innerHTML = '';
+                empty.hidden = false;
+            } else {
+                empty.hidden = true;
+                body.innerHTML = matrix.participants.map((p) => `
+                    <tr>
+                        <td>${escapeHtml(p.id)}</td>
+                        <td>${escapeHtml(p.displayName)}</td>
+                        ${p.scores.map((s) => `<td class="num">${s}</td>`).join('')}
+                        <td class="num col-total">${p.total}</td>
+                    </tr>
+                `).join('');
+
+                const grand = matrix.teamTotals.reduce((a, b) => a + b, 0);
+                foot.innerHTML = `
+                    <tr class="totals-row">
+                        <td colspan="2">チーム合計</td>
+                        ${matrix.teamTotals.map((t) => `<td class="num">${t}</td>`).join('')}
+                        <td class="num col-total">${grand}</td>
+                    </tr>
+                `;
+            }
+
+            const setLabel = matrix.setName
+                ? `セット: ${matrix.setName}`
+                : matrix.currentSet
+                  ? `セット${matrix.currentSet}`
+                  : '';
+            if (matrix.generatedAt) {
+                const d = new Date(matrix.generatedAt);
+                updated.textContent = [setLabel, `最終更新: ${d.toLocaleString('ja-JP')}`]
+                    .filter(Boolean)
+                    .join(' / ');
+            } else if (setLabel) {
+                updated.textContent = setLabel;
+            }
+        }
+
+        function escapeHtml(text) {
+            return String(text ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        async function loadMatrix() {
+            try {
+                const res = await fetch('/api/scores-matrix', { cache: 'no-store' });
+                if (!res.ok) {
+                    throw new Error('fetch failed');
+                }
+                const data = await res.json();
+                renderMatrix(data);
+            } catch {
+                document.getElementById('updatedAt').textContent = 'データを取得できませんでした。親機サーバーが起動しているか確認してください。';
+            }
+        }
+
+        function downloadCsvClient() {
+            window.location.href = '/api/scores-matrix.csv';
+        }
+
+        document.getElementById('refreshBtn').addEventListener('click', loadMatrix);
+        document.getElementById('csvBtn').addEventListener('click', downloadCsvClient);
+
+        socket.on('connect', () => {
+            loadMatrix();
+            socket.emit('request-scores-matrix');
+        });
+
+        socket.on('scores-matrix', (data) => {
+            renderMatrix(data);
+        });
+
+        socket.on('set-changed', () => loadMatrix());
+        socket.on('team-names', () => loadMatrix());
+        socket.on('score-updated', () => loadMatrix());
+        socket.on('client-connected', () => loadMatrix());
+        socket.on('client-disconnected', () => loadMatrix());
+
+        loadMatrix();
+    </script>
+</body>
+</html>

@@ -3,301 +3,183 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>観覧用 - 点数表示</title>
+    <title>観覧用 - 全セット点数一覧</title>
     <link rel="stylesheet" href="styles.css">
     <script src="/socket.io/socket.io.js"></script>
-    <style>
-        .viewer-page {
-            background: #1a1a1a;
-            color: white;
-        }
-
-        .viewer-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-
-        .viewer-header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-
-        .viewer-header h1 {
-            font-size: 3rem;
-            color: #fff;
-            margin-bottom: 20px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-
-        .scores-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 20px;
-            margin-bottom: 40px;
-        }
-
-        .team-section {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .team-header-row {
-            display: flex;
-            justify-content: center;
-        }
-
-        .team-score-card {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-            border-radius: 12px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            border: 3px solid #444;
-        }
-
-        .team-score-card.current {
-            border-color: #ffd700;
-        }
-
-        .team-name {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #fff;
-            margin-bottom: 10px;
-        }
-
-        .team-score-card.current .team-name {
-            color: #ffd700;
-        }
-
-        .team-score {
-            font-size: 3rem;
-            font-weight: 700;
-            color: #fff;
-            line-height: 1;
-        }
-
-        .team-unit {
-            font-size: 1.5rem;
-            color: #aaa;
-            margin-left: 5px;
-        }
-
-        .clients-display {
-            display: contents;
-        }
-
-        .team-clients-grid {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .clients-grid {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 20px;
-        }
-
-        .clients-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 15px;
-        }
-
-        .client-item {
-            background: white;
-            border-radius: 8px;
-            padding: 15px;
-            border-left: 4px solid #6c757d;
-        }
-
-        .client-item.active {
-            border-left-color: #28a745;
-        }
-
-        .client-name {
-            font-size: 1.2rem;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #212529;
-        }
-
-        .client-score {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #212529;
-        }
-
-        .client-status {
-            font-size: 0.85rem;
-            color: #6c757d;
-            margin-top: 5px;
-        }
-
-        .connection-indicator {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(0,0,0,0.7);
-            padding: 10px 20px;
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .connection-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #28a745;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-    </style>
 </head>
-<body class="viewer-page">
-    <div class="connection-indicator">
-        <span class="connection-dot"></span>
-        <span>接続中</span>
-    </div>
-
-    <div class="viewer-container">
-        <div class="viewer-header">
-            <h1>点数集計システム</h1>
+<body class="viewer-excel-page">
+    <header class="viewer-excel-header">
+        <div>
+            <h1>点数集計（全セット一覧）</h1>
+            <p class="viewer-excel-lead">上段：セット1〜3　下段：セット4〜6（各6チーム）。確定点数のみ表示。</p>
         </div>
-
-        <div class="scores-grid" id="scoresGrid">
-            <!-- チームスコアカードがここに表示される -->
+        <div class="viewer-excel-actions">
+            <button type="button" class="btn btn-primary" id="refreshBtn">更新</button>
+            <button type="button" class="btn btn-primary" id="csvBtn">CSV</button>
+            <span class="viewer-excel-live" id="liveBadge" hidden><span class="viewer-excel-dot"></span>接続中</span>
         </div>
+    </header>
 
-        <div class="clients-display">
-            <div class="clients-grid" id="clientsGrid">
-                <!-- 子機情報がここに表示される -->
-            </div>
-        </div>
-    </div>
+    <p class="viewer-excel-meta" id="metaLine">読み込み中…</p>
+    <div class="viewer-excel-stack" id="matrixStack"></div>
+    <p id="emptyHint" class="viewer-excel-empty" hidden>接続中の子機がありません。</p>
 
     <script>
         const socket = io();
-        let allRoundsData = {}; // 全ラウンドの子機データ
-        let currentRound = 1;
-        let teamTotals = [0, 0, 0, 0, 0];
-        const teamNames = ['A', 'B', 'C', 'D', 'E'];
+        const TEAM_COUNT = 6;
+        const BANDS = [
+            { title: 'セット１〜３', indices: [0, 1, 2] },
+            { title: 'セット４〜６', indices: [3, 4, 5] }
+        ];
 
-        // 初回接続時
-        socket.on('connect', () => {
-            console.log('サーバーに接続しました');
-            socket.emit('request-current-round');
-            socket.emit('request-team-totals');
-            socket.emit('request-all-rounds-data');
-        });
-
-        // チーム別の合計を受信
-        socket.on('team-totals', (data) => {
-            console.log('チーム別合計受信:', data);
-            teamTotals = data.teams.map(team => team.score || 0);
-            updateDisplay();
-        });
-
-        // 全ラウンドデータを受信
-        socket.on('all-rounds-data', (data) => {
-            console.log('全ラウンドデータ受信:', data);
-            allRoundsData = data.rounds;
-            updateDisplay();
-        });
-
-        // 現在のラウンドを受信
-        socket.on('current-round', (round) => {
-            currentRound = round;
-            updateDisplay();
-        });
-
-        // ラウンド変更を受信
-        socket.on('round-changed', (round) => {
-            currentRound = round;
-            updateDisplay();
-        });
-
-        // 子機情報を受信（全ラウンドデータを再取得）
-        socket.on('clients-data', (data) => {
-            socket.emit('request-all-rounds-data');
-        });
-
-        socket.on('client-connected', (data) => {
-            socket.emit('request-all-rounds-data');
-        });
-
-        socket.on('score-updated', (data) => {
-            socket.emit('request-all-rounds-data');
-            socket.emit('request-team-totals');
-        });
-
-        socket.on('client-disconnected', (data) => {
-            socket.emit('request-all-rounds-data');
-        });
-
-        // 表示を更新
-        function updateDisplay() {
-            const scoresGrid = document.getElementById('scoresGrid');
-            
-            // 全チームの合計を表示
-            scoresGrid.innerHTML = '';
-            
-            teamNames.forEach((name, index) => {
-                const teamScore = teamTotals[index] || 0;
-                const isCurrent = (index + 1) === currentRound;
-                const roundNum = index + 1;
-                
-                const section = document.createElement('div');
-                section.className = 'team-section';
-                
-                // チーム合計カード
-                const teamCard = `
-                    <div class="team-score-card ${isCurrent ? 'current' : ''}">
-                        <div class="team-name">${name}</div>
-                        <div class="team-score">
-                            ${teamScore}<span class="team-unit">点</span>
-                        </div>
-                    </div>
-                `;
-                
-                // そのチーム（ラウンド）の子機リスト
-                const clientsList = allRoundsData[roundNum] || [];
-                let clientsHTML = '<div class="team-clients-grid">';
-                
-                if (clientsList.length === 0) {
-                    clientsHTML += '<div class="client-item"><div class="client-name">-</div><div class="client-score">0点</div></div>';
-                } else {
-                    clientsList.forEach(client => {
-                        const score = client.score !== null && client.score !== undefined ? client.score : 0;
-                        const isActive = score > 0;
-                        
-                        clientsHTML += `
-                            <div class="client-item ${isActive ? 'active' : ''}">
-                                <div class="client-name">${client.name}</div>
-                                <div class="client-score">${score}点</div>
-                            </div>
-                        `;
-                    });
-                }
-                
-                clientsHTML += '</div>';
-                
-                section.innerHTML = teamCard + clientsHTML;
-                scoresGrid.appendChild(section);
-            });
+        function escapeHtml(text) {
+            return String(text ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
         }
-        
-        // 初期表示
-        updateDisplay();
+
+        function formatTeamShort(name, index) {
+            const raw = (name || '').replace(/チーム/g, '').trim();
+            if (raw) {
+                return raw.length > 8 ? `${raw.slice(0, 8)}…` : raw;
+            }
+            return ['A', 'B', 'C', 'D', 'E', 'F'][index] || String(index + 1);
+        }
+
+        function nameLabel(participant) {
+            const display = (participant.displayName || '').trim();
+            const id = participant.id || '';
+            if (display && display !== id) {
+                return `${id} ${display}`;
+            }
+            return display || id;
+        }
+
+        function buildBand(matrix, band, currentSet) {
+            const setHeader = band.indices.map((setIdx) => {
+                const setBlock = matrix.sets[setIdx];
+                const cls = setBlock.set === currentSet ? 'set-group set-group-current' : 'set-group';
+                return `<th colspan="${TEAM_COUNT}" class="${cls}">${escapeHtml(setBlock.setName)}</th>`;
+            }).join('');
+
+            const teamHeader = band.indices.map((setIdx) => {
+                const setBlock = matrix.sets[setIdx];
+                const cls = setBlock.set === currentSet ? 'set-group set-group-current' : 'set-group';
+                return setBlock.teamNames.map((name, i) =>
+                    `<th class="${cls} team-col" title="${escapeHtml(name)}">${escapeHtml(formatTeamShort(name, i))}</th>`
+                ).join('');
+            }).join('');
+
+            const body = matrix.participants.map((p) => {
+                const scores = band.indices.map((setIdx) => {
+                    const setBlock = matrix.sets[setIdx];
+                    const cls = setBlock.set === currentSet ? 'set-group set-group-current' : 'set-group';
+                    return p.scoresBySet[setIdx].map((score) =>
+                        `<td class="num ${cls}">${score}</td>`
+                    ).join('');
+                }).join('');
+                return `
+                    <tr>
+                        <td class="sticky-col sticky-name" title="${escapeHtml(p.id)}">${escapeHtml(nameLabel(p))}</td>
+                        ${scores}
+                    </tr>
+                `;
+            }).join('');
+
+            const totals = band.indices.map((setIdx) => {
+                const setBlock = matrix.sets[setIdx];
+                const cls = setBlock.set === currentSet ? 'set-group set-group-current' : 'set-group';
+                return setBlock.teamTotals.map((t) => `<td class="num ${cls}">${t}</td>`).join('');
+            }).join('');
+
+            return `
+                <section class="viewer-excel-band">
+                    <h2 class="viewer-excel-band-title">${escapeHtml(band.title)}</h2>
+                    <div class="viewer-excel-wrap">
+                        <table class="excel-matrix">
+                            <thead>
+                                <tr class="head-set-row">
+                                    <th class="sticky-col sticky-name" rowspan="2">名前</th>
+                                    ${setHeader}
+                                </tr>
+                                <tr class="head-team-row">${teamHeader}</tr>
+                            </thead>
+                            <tbody>${body}</tbody>
+                            <tfoot>
+                                <tr class="totals-row">
+                                    <td class="sticky-col">チーム合計</td>
+                                    ${totals}
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </section>
+            `;
+        }
+
+        function renderMatrix(matrix) {
+            const stack = document.getElementById('matrixStack');
+            const empty = document.getElementById('emptyHint');
+            const meta = document.getElementById('metaLine');
+            const currentSet = matrix.currentSet || 1;
+
+            if (!matrix.participants.length) {
+                stack.innerHTML = '';
+                empty.hidden = false;
+            } else {
+                empty.hidden = true;
+                stack.innerHTML = BANDS.map((band) => buildBand(matrix, band, currentSet)).join('');
+            }
+
+            const currentSetName = matrix.sets[currentSet - 1]?.setName || `セット${currentSet}`;
+            const parts = [`操作中: ${currentSetName} / チーム${matrix.currentRound || 1}`];
+            if (matrix.generatedAt) {
+                parts.push(`更新: ${new Date(matrix.generatedAt).toLocaleString('ja-JP')}`);
+            }
+            meta.textContent = parts.join('　');
+        }
+
+        async function loadMatrix() {
+            try {
+                const res = await fetch('/api/scores-matrix/all', { cache: 'no-store' });
+                if (!res.ok) {
+                    throw new Error('fetch failed');
+                }
+                renderMatrix(await res.json());
+            } catch {
+                document.getElementById('metaLine').textContent =
+                    'データを取得できませんでした。親機が起動しているか確認してください。';
+            }
+        }
+
+        document.getElementById('refreshBtn').addEventListener('click', loadMatrix);
+        document.getElementById('csvBtn').addEventListener('click', () => {
+            window.location.href = '/api/scores-matrix-all.csv';
+        });
+
+        function bindRealtime() {
+            loadMatrix();
+            socket.emit('request-scores-matrix-all');
+        }
+
+        socket.on('connect', () => {
+            document.getElementById('liveBadge').hidden = false;
+            bindRealtime();
+        });
+        socket.on('disconnect', () => {
+            document.getElementById('liveBadge').hidden = true;
+        });
+        socket.on('scores-matrix-all', (data) => renderMatrix(data));
+        socket.on('score-updated', bindRealtime);
+        socket.on('set-changed', bindRealtime);
+        socket.on('team-names', bindRealtime);
+        socket.on('client-connected', bindRealtime);
+        socket.on('client-disconnected', bindRealtime);
+        socket.on('round-changed', bindRealtime);
+
+        loadMatrix();
     </script>
 </body>
 </html>

@@ -72,7 +72,11 @@ function buildNetworkInfo() {
             clientLocal: `${baseLocal}/client`,
             clientLan: baseLan ? `${baseLan}/client` : '（LAN IPを取得できません）',
             rankingLocal: `${baseLocal}/ranking`,
-            rankingLan: baseLan ? `${baseLan}/ranking` : null
+            rankingLan: baseLan ? `${baseLan}/ranking` : '（LAN IPを取得できません）',
+            scoresTableLocal: `${baseLocal}/scores-table.html`,
+            scoresTableLan: baseLan ? `${baseLan}/scores-table.html` : '（LAN IPを取得できません）',
+            viewerLocal: `${baseLocal}/viewer.html`,
+            viewerLan: baseLan ? `${baseLan}/viewer.html` : '（LAN IPを取得できません）'
         }
     };
 }
@@ -341,9 +345,9 @@ function browserWindowIconOptions() {
 function createLauncherWindow() {
     launcherWindow = new BrowserWindow({
         width: 960,
-        height: 720,
+        height: 820,
         minWidth: 720,
-        minHeight: 660,
+        minHeight: 720,
         title: '集計システム ランチャー',
         autoHideMenuBar: true,
         ...browserWindowIconOptions(),

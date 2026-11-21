@@ -67,9 +67,10 @@
             </div>
         </section>
 
-        <section id="addressSection" class="launcher-address-section" hidden>
+        <section id="addressSection" class="launcher-address-section">
             <h2>接続アドレス</h2>
-            <p class="launcher-hint">別端末からは LAN の URL をブラウザで開いてください。</p>
+            <p id="addressServerHint" class="launcher-hint">サーバー起動後にブラウザから開けます。子機アプリの接続欄には <code>localhost</code> または LAN の IP を入力。</p>
+            <p class="launcher-hint launcher-lan-ip">このPCの LAN IP（子機接続用）: <strong id="lanIpLine">—</strong></p>
             <div class="launcher-address-columns">
                 <div class="address-block">
                     <h3>親機（操作画面）</h3>
@@ -84,7 +85,6 @@
                 </div>
                 <div class="address-block">
                     <h3>子機（点数入力）</h3>
-                    <p class="address-hint">子機アプリの接続欄: <code>localhost</code> または LAN の IP（下記 URL を貼っても可）</p>
                     <div class="address-line">
                         <span class="address-label">このPC</span>
                         <code id="clientLocalUrl">—</code>
@@ -92,6 +92,28 @@
                     <div class="address-line">
                         <span class="address-label">LAN</span>
                         <code id="clientLanUrl">—</code>
+                    </div>
+                </div>
+                <div class="address-block address-block-wide">
+                    <h3>点数一覧（CSV）</h3>
+                    <div class="address-line">
+                        <span class="address-label">このPC</span>
+                        <code id="scoresTableLocalUrl">—</code>
+                    </div>
+                    <div class="address-line">
+                        <span class="address-label">LAN</span>
+                        <code id="scoresTableLanUrl">—</code>
+                    </div>
+                </div>
+                <div class="address-block address-block-wide">
+                    <h3>観覧用</h3>
+                    <div class="address-line">
+                        <span class="address-label">このPC</span>
+                        <code id="viewerLocalUrl">—</code>
+                    </div>
+                    <div class="address-line">
+                        <span class="address-label">LAN</span>
+                        <code id="viewerLanUrl">—</code>
                     </div>
                 </div>
             </div>

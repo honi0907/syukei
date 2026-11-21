@@ -133,8 +133,8 @@
         let isLocked = false;
         let unlockRequested = false;
         let currentRound = 1;
-        const TEAM_COUNT = 5;
-        let teamNames = ['A', 'B', 'C', 'D', 'E']; // デフォルト（5チーム）
+        const TEAM_COUNT = 6;
+        let teamNames = ['A', 'B', 'C', 'D', 'E', 'F'];
         let roundHistory = {
             1: null, 2: null, 3: null, 4: null, 5: null
         }; // チーム別履歴(各チーム最新1件のみ)
@@ -334,7 +334,15 @@
             // チーム名を受信
             socket.on('team-names', (data) => {
                 teamNames = data.teamNames;
-                console.log('チーム名受信:', teamNames);
+                console.log('チーム名受信:', data);
+                updateCurrentRoundDisplay();
+                updateHistoryDisplay();
+            });
+
+            socket.on('set-changed', (data) => {
+                if (Array.isArray(data.teamNames)) {
+                    teamNames = data.teamNames;
+                }
                 updateCurrentRoundDisplay();
                 updateHistoryDisplay();
             });
@@ -631,27 +639,117 @@
             }
         }
 
+        function escapeHtml(text) {
+            return String(text ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function measureTextWidth(text, sizePx, style) {
+            const canvas = measureTextWidth.canvas || (measureTextWidth.canvas = document.createElement('canvas'));
+            const ctx = canvas.getContext('2d');
+            const weight = style.fontWeight || '600';
+            const family = style.fontFamily || 'sans-serif';
+            ctx.font = `${weight} ${sizePx}px ${family}`;
+            return ctx.measureText(text).width;
+        }
+
+        function fitHistoryTeamLine(roundTotalEl) {
+            const nameEl = roundTotalEl.querySelector('.history-team-name');
+            const scoreEl = roundTotalEl.querySelector('.history-team-score');
+            if (!nameEl || !scoreEl) {
+                return;
+            }
+
+            const boxStyle = getComputedStyle(roundTotalEl);
+            const pad = (parseFloat(boxStyle.paddingLeft) || 0) + (parseFloat(boxStyle.paddingRight) || 0);
+            const inner = roundTotalEl.clientWidth - pad;
+            if (inner <= 8) {
+                return;
+            }
+
+            const scoreStyle = getComputedStyle(scoreEl);
+            const scoreSize = parseFloat(scoreStyle.fontSize) || 20;
+            const scoreText = scoreEl.textContent || '';
+            const scoreW = measureTextWidth(scoreText, scoreSize, scoreStyle) + 6;
+            const available = inner - scoreW;
+            if (available <= 4) {
+                return;
+            }
+
+            const name = nameEl.textContent || '';
+            const nameStyle = getComputedStyle(nameEl);
+            const maxPx = 22;
+            const minPx = 1;
+            let lo = minPx;
+            let hi = maxPx;
+            let best = minPx;
+
+            while (hi - lo > 0.25) {
+                const mid = (lo + hi) / 2;
+                if (measureTextWidth(name, mid, nameStyle) <= available) {
+                    best = mid;
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+
+            nameEl.style.fontSize = `${Math.floor(best * 10) / 10}px`;
+            nameEl.style.maxWidth = 'none';
+            nameEl.style.overflow = 'visible';
+            nameEl.style.textOverflow = 'clip';
+        }
+
+        function fitAllHistoryTeamLines() {
+            document.querySelectorAll('.history-list-compact .round-total').forEach(fitHistoryTeamLine);
+        }
+
+        let historyFitResizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(historyFitResizeTimer);
+            historyFitResizeTimer = setTimeout(fitAllHistoryTeamLines, 100);
+        });
+
         function updateHistoryDisplay() {
             const historyList = document.getElementById('historyList');
-            
-            // 全チームの履歴を表示
+
             let html = '';
-            
+
             for (let r = 1; r <= TEAM_COUNT; r++) {
                 const roundData = roundHistory[r];
                 const roundTotal = roundData ? roundData.score : 0;
                 const teamLabel = teamNames[r - 1] || `チーム${r}`;
-                
-                // チームごとのセクション（常に表示）
+
                 html += `
                     <div class="round-history-section ${r === currentRound ? 'current-round' : ''}">
-                        <div class="round-total">${teamLabel}: ${roundTotal}点</div>
+                        <div class="round-total">
+                            <span class="history-team-name">${escapeHtml(teamLabel)}</span><span class="history-team-score">: ${roundTotal}点</span>
+                        </div>
                     </div>
                 `;
             }
-            
-            // 常に履歴を表示
+
             historyList.innerHTML = html;
+            const runFit = () => {
+                if (document.fonts && document.fonts.ready) {
+                    document.fonts.ready.then(fitAllHistoryTeamLines).catch(fitAllHistoryTeamLines);
+                } else {
+                    fitAllHistoryTeamLines();
+                }
+            };
+            requestAnimationFrame(runFit);
+            setTimeout(runFit, 50);
+            setTimeout(runFit, 300);
+        }
+
+        if (typeof ResizeObserver !== 'undefined') {
+            const historyListEl = document.getElementById('historyList');
+            if (historyListEl) {
+                new ResizeObserver(() => fitAllHistoryTeamLines()).observe(historyListEl);
+            }
         }
 
         function addToHistory(score) {

@@ -9,6 +9,8 @@
     <script src="/js/ranking-settings.js" defer></script>
     <script src="/js/client-name-settings.js" defer></script>
     <script src="/js/team-name-settings.js" defer></script>
+    <script src="/js/set-name-settings.js" defer></script>
+    <script src="/js/app-settings-json.js" defer></script>
 </head>
 <body class="settings-page">
     <div class="settings-shell">
@@ -20,6 +22,8 @@
             <nav class="settings-nav">
                 <button type="button" class="settings-nav-item" data-panel="client-names">子機名</button>
                 <button type="button" class="settings-nav-item" data-panel="team-names">チーム名</button>
+                <button type="button" class="settings-nav-item" data-panel="set-names">セット名</button>
+                <button type="button" class="settings-nav-item" data-panel="settings-backup">設定の保存</button>
                 <button type="button" class="settings-nav-item active" data-panel="layout">レイアウト</button>
                 <button type="button" class="settings-nav-item" data-panel="animation">アニメーション</button>
                 <button type="button" class="settings-nav-item" data-panel="digit-style">数字の見た目</button>
@@ -65,13 +69,20 @@
             <section id="panel-team-names" class="settings-panel">
                 <header class="settings-panel-header">
                     <h2>チーム名</h2>
-                    <p>1セット5チーム（A〜E）。子機名と同様にファイル参照と開始行で切り替えできます。</p>
+                    <p>最大6セット×各6チーム。1つの teamname.txt から、セットごとに「読み始め行」を指定して呼み出します。</p>
                 </header>
 
                 <div class="settings-field">
-                    <label for="teamNameStartLine">読み始める行（1行目＝1）</label>
-                    <input type="number" id="teamNameStartLine" min="1" max="9999" value="1" class="settings-number-input">
-                    <p class="settings-field-hint">例: 6 にすると6行目から5行分がチームA〜E になります。</p>
+                    <label>各セットの読み始め行（1行目＝1）</label>
+                    <div class="team-set-startlines-grid" id="teamSetStartLinesGrid">
+                        <label class="team-set-startline-item">セット1 <input type="number" id="teamSetStartLine1" min="1" max="9999" value="1" class="settings-number-input"></label>
+                        <label class="team-set-startline-item">セット2 <input type="number" id="teamSetStartLine2" min="1" max="9999" value="7" class="settings-number-input"></label>
+                        <label class="team-set-startline-item">セット3 <input type="number" id="teamSetStartLine3" min="1" max="9999" value="13" class="settings-number-input"></label>
+                        <label class="team-set-startline-item">セット4 <input type="number" id="teamSetStartLine4" min="1" max="9999" value="19" class="settings-number-input"></label>
+                        <label class="team-set-startline-item">セット5 <input type="number" id="teamSetStartLine5" min="1" max="9999" value="25" class="settings-number-input"></label>
+                        <label class="team-set-startline-item">セット6 <input type="number" id="teamSetStartLine6" min="1" max="9999" value="31" class="settings-number-input"></label>
+                    </div>
+                    <p class="settings-field-hint">例: 各セット6行。セット2を 7 にすると、7〜12行目がチームA〜F になります。セット1を 13:20 から5社だけにする場合は開始行を「2」に。</p>
                 </div>
 
                 <div class="settings-field">
@@ -89,8 +100,57 @@
                 </div>
 
                 <div class="settings-field">
-                    <label id="teamNamePreviewLabel">プレビュー</label>
+                    <label id="teamNamePreviewLabel">プレビュー（現在のセット）</label>
                     <ol id="teamNamePreviewList" class="client-name-preview-list"></ol>
+                </div>
+            </section>
+
+            <section id="panel-set-names" class="settings-panel">
+                <header class="settings-panel-header">
+                    <h2>セット名</h2>
+                    <p>親機のセット切替ボタンに表示する名前。setname.txt から開始行で6件読み込みます。</p>
+                </header>
+
+                <div class="settings-field">
+                    <label for="setNameStartLine">読み始める行（1行目＝1）</label>
+                    <input type="number" id="setNameStartLine" min="1" max="9999" value="1" class="settings-number-input">
+                </div>
+
+                <div class="settings-field">
+                    <label for="setNameFilePath">参照ファイル</label>
+                    <div class="settings-file-row">
+                        <input type="text" id="setNameFilePath" class="settings-text-input" readonly placeholder="未設定（setname.txt）">
+                        <button type="button" id="browseSetNameFileBtn" class="btn btn-secondary">参照…</button>
+                    </div>
+                    <input type="file" id="setNameFileInput" accept=".txt,text/plain" hidden>
+                </div>
+
+                <div class="settings-field">
+                    <button type="button" id="reloadSetNameFileBtn" class="btn btn-primary">ファイルから読み込む</button>
+                    <p id="setNameLoadStatus" class="settings-load-status" aria-live="polite"></p>
+                </div>
+
+                <div class="settings-field">
+                    <label id="setNamePreviewLabel">プレビュー</label>
+                    <ol id="setNamePreviewList" class="client-name-preview-list"></ol>
+                </div>
+            </section>
+
+            <section id="panel-settings-backup" class="settings-panel">
+                <header class="settings-panel-header">
+                    <h2>設定の保存（JSON）</h2>
+                    <p>子機名・チーム名・セット名のファイルパスと読み始め行、現在のセット／チームを JSON で書き出し・読み込みできます。点数データは含みません。</p>
+                </header>
+
+                <div class="settings-field">
+                    <button type="button" id="exportSettingsJsonBtn" class="btn btn-primary">JSONをダウンロード</button>
+                    <p class="settings-field-hint">ファイル名例: syukei-settings-2025-11-21.json</p>
+                </div>
+
+                <div class="settings-field">
+                    <label for="importSettingsJsonInput">JSONを読み込む</label>
+                    <input type="file" id="importSettingsJsonInput" accept=".json,application/json" class="settings-text-input">
+                    <p id="settingsJsonStatus" class="settings-load-status" aria-live="polite"></p>
                 </div>
             </section>
 

@@ -18,23 +18,55 @@ try {
 }
 const GITHUB_RELEASES_URL = 'https://github.com/honi0907/syukei/releases/latest';
 
-const TEAM_COUNT = 5;
+const {
+    SET_COUNT,
+    TEAM_COUNT: SETS_TEAM_COUNT,
+    DEFAULT_TEAM_SET_START_LINES,
+    defaultTeamNames,
+    defaultSetNames,
+    defaultSetNameLabel,
+    extractNamesFromFileLines: extractTeamLines,
+    readStartLinesFile,
+    saveStartLinesFile,
+    createEmptyRoundScores,
+    migrateLegacyRoundScores,
+    ensureTeamBucket,
+    setClientScore,
+    scoreForClientInSet,
+    grandTotalForClient,
+    getClientScore
+} = require('./lib/syukei-sets.js');
+
+const TEAM_COUNT = SETS_TEAM_COUNT;
 const CLIENT_ID_COUNT = 10;
 
 const TEAM_NAME_PATH_FILE = path.join(__dirname, 'teamname-path.txt');
 const DEFAULT_TEAM_NAME_FILE = path.join(__dirname, 'teamname.txt');
-const TEAM_NAME_START_FILE = path.join(__dirname, 'teamname-startline.txt');
+const TEAM_SET_STARTLINES_FILE = path.join(__dirname, 'team-set-startlines.txt');
+
+const SET_NAME_PATH_FILE = path.join(__dirname, 'setname-path.txt');
+const DEFAULT_SET_NAME_FILE = path.join(__dirname, 'setname.txt');
+const SET_NAME_START_FILE = path.join(__dirname, 'setname-startline.txt');
 
 const CLIENT_NAME_PATH_FILE = path.join(__dirname, 'clientname-path.txt');
 const DEFAULT_CLIENT_NAME_FILE = path.join(__dirname, 'clientname.txt');
 const CLIENT_NAME_START_FILE = path.join(__dirname, 'clientname-startline.txt');
 
-/** @type {string[]} */
-let teamNames = ['A', 'B', 'C', 'D', 'E'];
+/** @type {string[]} 現在セットの5チーム名 */
+let teamNames = defaultTeamNames();
+/** @type {string[][]} */
+let teamNamesBySet = Array.from({ length: SET_COUNT }, () => defaultTeamNames());
+/** @type {number[]} 各セットの teamname.txt 読み始め行 */
+let teamSetStartLines = [...DEFAULT_TEAM_SET_START_LINES];
 /** @type {string} */
 let teamNameSourcePath = DEFAULT_TEAM_NAME_FILE;
+/** @type {string[]} */
+let setNames = defaultSetNames();
+/** @type {string} */
+let setNameSourcePath = DEFAULT_SET_NAME_FILE;
 /** @type {number} */
-let teamNameStartLine = 1;
+let setNameStartLine = 1;
+let currentSet = 1;
 
 /** @type {string[]} */
 let clientDisplayNames = Array.from({ length: CLIENT_ID_COUNT }, (_, i) => `ID${i + 1}`);
@@ -42,10 +74,6 @@ let clientDisplayNames = Array.from({ length: CLIENT_ID_COUNT }, (_, i) => `ID${
 let clientNameSourcePath = DEFAULT_CLIENT_NAME_FILE;
 /** @type {number} */
 let clientNameStartLine = 1;
-
-function defaultTeamNames() {
-    return ['A', 'B', 'C', 'D', 'E'];
-}
 
 function defaultClientDisplayNames() {
     return Array.from({ length: CLIENT_ID_COUNT }, (_, i) => `ID${i + 1}`);
@@ -87,20 +115,37 @@ function extractNamesFromFileLines(fileLines, startLine, count, defaultFactory) 
     return names;
 }
 
-function applyTeamNamesFromContent(content, startLine = teamNameStartLine) {
-    const safeStart = Math.max(1, Math.floor(startLine));
-    teamNameStartLine = safeStart;
-    saveStartLine(TEAM_NAME_START_FILE, safeStart);
-    teamNames = extractNamesFromFileLines(
-        content.split(/\r?\n/),
-        safeStart,
-        TEAM_COUNT,
-        defaultTeamNames
+function syncActiveTeamNames() {
+    teamNames = teamNamesBySet[currentSet - 1] || defaultTeamNames();
+}
+
+function applyAllTeamSetsFromContent(content) {
+    const fileLines = content.split(/\r?\n/);
+    for (let s = 0; s < SET_COUNT; s += 1) {
+        teamNamesBySet[s] = extractTeamLines(
+            fileLines,
+            teamSetStartLines[s],
+            TEAM_COUNT,
+            defaultTeamNames
+        );
+    }
+    syncActiveTeamNames();
+}
+
+function loadTeamSetStartLinesFromDisk() {
+    teamSetStartLines = readStartLinesFile(
+        TEAM_SET_STARTLINES_FILE,
+        SET_COUNT,
+        DEFAULT_TEAM_SET_START_LINES
     );
 }
 
+function saveTeamSetStartLinesToDisk() {
+    saveStartLinesFile(TEAM_SET_STARTLINES_FILE, teamSetStartLines);
+}
+
 function loadTeamNamesFromDisk() {
-    teamNameStartLine = readStartLine(TEAM_NAME_START_FILE, 1);
+    loadTeamSetStartLinesFromDisk();
     try {
         if (fs.existsSync(TEAM_NAME_PATH_FILE)) {
             const savedPath = fs.readFileSync(TEAM_NAME_PATH_FILE, 'utf8').trim();
@@ -115,17 +160,125 @@ function loadTeamNamesFromDisk() {
     try {
         if (fs.existsSync(teamNameSourcePath)) {
             const content = fs.readFileSync(teamNameSourcePath, 'utf8');
-            applyTeamNamesFromContent(content, teamNameStartLine);
-            console.log('チーム名を読み込みました:', teamNameSourcePath, '開始行:', teamNameStartLine);
+            applyAllTeamSetsFromContent(content);
+            console.log('チーム名を読み込みました:', teamNameSourcePath, 'セット開始行:', teamSetStartLines.join(','));
         }
     } catch (error) {
         console.error('チーム名ファイル読み込みエラー:', error);
     }
+    syncActiveTeamNames();
 }
 
 function saveTeamNameSourcePath(filePath) {
     teamNameSourcePath = filePath;
     fs.writeFileSync(TEAM_NAME_PATH_FILE, filePath, 'utf8');
+}
+
+function ensureDefaultSetNameFile() {
+    try {
+        if (!fs.existsSync(DEFAULT_SET_NAME_FILE)) {
+            fs.writeFileSync(DEFAULT_SET_NAME_FILE, `${defaultSetNames().join('\n')}\n`, 'utf8');
+        }
+    } catch (error) {
+        console.error('セット名デフォルトファイル作成エラー:', error);
+    }
+}
+
+function isSameResolvedPath(a, b) {
+    try {
+        return path.resolve(a) === path.resolve(b);
+    } catch {
+        return false;
+    }
+}
+
+function resolveSetNameSourcePath() {
+    let candidate = DEFAULT_SET_NAME_FILE;
+    try {
+        if (fs.existsSync(SET_NAME_PATH_FILE)) {
+            const savedPath = fs.readFileSync(SET_NAME_PATH_FILE, 'utf8').trim();
+            if (savedPath && fs.existsSync(savedPath)) {
+                candidate = savedPath;
+            }
+        }
+    } catch (error) {
+        console.error('セット名パス読み込みエラー:', error);
+    }
+  if (isSameResolvedPath(candidate, teamNameSourcePath)) {
+        console.warn(
+            'セット名にチーム名と同じファイルが指定されていたため無視し、setname.txt を使います:',
+            candidate
+        );
+        try {
+            if (fs.existsSync(SET_NAME_PATH_FILE)) {
+                fs.unlinkSync(SET_NAME_PATH_FILE);
+            }
+        } catch {
+            // ignore
+        }
+        candidate = DEFAULT_SET_NAME_FILE;
+    }
+    return candidate;
+}
+
+function applySetNamesFromContent(content, startLine = setNameStartLine) {
+    const safeStart = Math.max(1, Math.floor(startLine));
+    setNameStartLine = safeStart;
+    saveStartLine(SET_NAME_START_FILE, safeStart);
+    setNames = extractTeamLines(
+        content.split(/\r?\n/),
+        safeStart,
+        SET_COUNT,
+        defaultSetNames
+    );
+}
+
+function loadSetNamesFromDisk() {
+    ensureDefaultSetNameFile();
+    setNameStartLine = readStartLine(SET_NAME_START_FILE, 1);
+    setNameSourcePath = resolveSetNameSourcePath();
+    try {
+        if (fs.existsSync(setNameSourcePath)) {
+            const content = fs.readFileSync(setNameSourcePath, 'utf8');
+            applySetNamesFromContent(content, setNameStartLine);
+        } else {
+            setNames = defaultSetNames();
+        }
+    } catch (error) {
+        console.error('セット名ファイル読み込みエラー:', error);
+        setNames = defaultSetNames();
+    }
+}
+
+function saveSetNameSourcePath(filePath) {
+    if (isSameResolvedPath(filePath, teamNameSourcePath)) {
+        throw new Error('セット名にチーム名と同じファイルは指定できません。setname.txt 用のファイルを選んでください。');
+    }
+    setNameSourcePath = filePath;
+    fs.writeFileSync(SET_NAME_PATH_FILE, filePath, 'utf8');
+}
+
+function buildSettingsSnapshot() {
+    return {
+        schema: 2,
+        exportedAt: new Date().toISOString(),
+        clientNames: {
+            path: clientNameSourcePath,
+            startLine: clientNameStartLine
+        },
+        teamNames: {
+            path: teamNameSourcePath,
+            setStartLines: [...teamSetStartLines]
+        },
+        setNames: {
+            path: setNameSourcePath,
+            startLine: setNameStartLine
+        },
+        runtime: {
+            currentSet,
+            currentRound
+        }
+    };
 }
 
 function applyClientNamesFromContent(content, startLine = clientNameStartLine) {
@@ -170,7 +323,19 @@ function saveClientNameSourcePath(filePath) {
 }
 
 function broadcastTeamNames() {
-    io.emit('team-names', { teamNames });
+    syncActiveTeamNames();
+    io.emit('team-names', {
+        teamNames,
+        currentSet,
+        setNames,
+        teamNamesBySet,
+        teamSetStartLines
+    });
+    io.emit('set-changed', {
+        set: currentSet,
+        setName: setNames[currentSet - 1],
+        teamNames
+    });
 }
 
 /**
@@ -211,6 +376,7 @@ function getClientDisplayName(clientId) {
 }
 
 loadTeamNamesFromDisk();
+loadSetNamesFromDisk();
 loadClientNamesFromDisk();
 
 // 静的ファイル配信
@@ -219,13 +385,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // データ管理
 const scores = {}; // {clientId: {name, score, locked, unlockRequested}}
-const roundScores = {
-    1: {},
-    2: {},
-    3: {},
-    4: {},
-    5: {}
-}; // ラウンド別スコア
+let roundScores = migrateLegacyRoundScores(createEmptyRoundScores());
 let currentRound = 1;
 const history = [];
 let connectedClients = new Set();
@@ -235,14 +395,7 @@ let connectedClients = new Set();
  * @param {number | string} [round]
  */
 function scoreForClientRound(name, round) {
-    if (round === 'total') {
-        let total = 0;
-        for (let r = 1; r <= 5; r += 1) {
-            total += roundScores[r]?.[name]?.score || 0;
-        }
-        return total;
-    }
-    return roundScores[round]?.[name]?.score || 0;
+  return scoreForClientInSet(roundScores, currentSet, name, round);
 }
 
 /**
@@ -261,7 +414,7 @@ function displayScoreForClient(name, round) {
         return committed;
     }
     if (round === 'total') {
-        const currentCommitted = roundScores[currentRound]?.[name]?.score || 0;
+        const currentCommitted = getClientScore(roundScores, currentSet, currentRound, name);
         return committed - currentCommitted + draft;
     }
     if (round === currentRound) {
@@ -318,6 +471,247 @@ function buildRankingClientList(round = currentRound) {
         .sort((a, b) => b.score - a.score);
 }
 
+function sumTeamRound(set, round) {
+    let teamTotal = 0;
+    const bucket = roundScores[set]?.[round] || {};
+    Object.values(bucket).forEach((client) => {
+        teamTotal += client.score || 0;
+    });
+    return teamTotal;
+}
+
+function buildTeamTotalsPayload() {
+    return {
+        set: currentSet,
+        setName: setNames[currentSet - 1],
+        teams: Array.from({ length: TEAM_COUNT }, (_, i) => ({
+            team: teamNames[i],
+            score: sumTeamRound(currentSet, i + 1)
+        }))
+    };
+}
+
+function clearRoundScoresForSet(set, round) {
+    const bucket = ensureTeamBucket(roundScores, set, round);
+    Object.keys(bucket).forEach((name) => {
+        bucket[name].score = 0;
+    });
+}
+
+function clearAllRoundScoresForSet(set) {
+    for (let r = 1; r <= TEAM_COUNT; r += 1) {
+        clearRoundScoresForSet(set, r);
+    }
+}
+
+function removeClientFromRoundScores(clientName) {
+    for (let s = 1; s <= SET_COUNT; s += 1) {
+        for (let r = 1; r <= TEAM_COUNT; r += 1) {
+            if (roundScores[s]?.[r]?.[clientName]) {
+                delete roundScores[s][r][clientName];
+            }
+        }
+    }
+}
+
+function deleteTestClientFromCurrentSet(testClientName) {
+    for (let r = 1; r <= TEAM_COUNT; r += 1) {
+        const bucket = roundScores[currentSet]?.[r];
+        if (bucket?.[testClientName]) {
+            delete bucket[testClientName];
+        }
+    }
+}
+
+/** 接続中の子機 ID（ID1 昇順 + その他） */
+function listConnectedParticipantIds() {
+    const standard = [];
+    for (let n = 1; n <= CLIENT_ID_COUNT; n += 1) {
+        const id = `ID${n}`;
+        if (scores[id]) {
+            standard.push(id);
+        }
+    }
+    const extra = Object.keys(scores).filter((name) => {
+        if (parseClientIdNumber(name)) {
+            return false;
+        }
+        return name !== '__TEST__' && name.toLowerCase() !== 'test';
+    });
+    return [...standard, ...extra];
+}
+
+/**
+ * 5チーム×個人の確定点数マトリクス（観覧・CSV用）
+ */
+function buildScoresMatrix() {
+    const participantIds = listConnectedParticipantIds();
+    const participants = participantIds.map((id) => {
+        const roundScoreList = [];
+        let total = 0;
+        for (let r = 1; r <= TEAM_COUNT; r += 1) {
+            const s = getClientScore(roundScores, currentSet, r, id);
+            roundScoreList.push(s);
+            total += s;
+        }
+        return {
+            id,
+            displayName: getClientDisplayName(id),
+            scores: roundScoreList,
+            total
+        };
+    });
+
+    const teamTotals = [];
+    for (let r = 1; r <= TEAM_COUNT; r += 1) {
+        let roundTotal = 0;
+        const bucket = roundScores[currentSet]?.[r] || {};
+        Object.values(bucket).forEach((row) => {
+            roundTotal += row.score || 0;
+        });
+        teamTotals.push(roundTotal);
+    }
+
+    return {
+        currentSet,
+        setName: setNames[currentSet - 1],
+        teamNames: (teamNamesBySet[currentSet - 1] || defaultTeamNames()).slice(0, TEAM_COUNT),
+        participants,
+        teamTotals,
+        generatedAt: new Date().toISOString()
+    };
+}
+
+/**
+ * 全セット（6×5チーム）の確定点数マトリクス（観覧・CSV用）
+ */
+function buildScoresMatrixAllSets() {
+    const participantIds = listConnectedParticipantIds();
+    const sets = [];
+
+    for (let s = 1; s <= SET_COUNT; s += 1) {
+        const teamNamesForSet = (teamNamesBySet[s - 1] || defaultTeamNames()).slice(0, TEAM_COUNT);
+        const teamTotals = [];
+        for (let r = 1; r <= TEAM_COUNT; r += 1) {
+            teamTotals.push(sumTeamRound(s, r));
+        }
+        const setTotal = teamTotals.reduce((a, b) => a + b, 0);
+        sets.push({
+            set: s,
+            setName: setNames[s - 1] || defaultSetNameLabel(s),
+            teamNames: teamNamesForSet,
+            teamTotals,
+            setTotal
+        });
+    }
+
+    const participants = participantIds.map((id) => {
+        const scoresBySet = [];
+        const setTotals = [];
+        let total = 0;
+        for (let s = 1; s <= SET_COUNT; s += 1) {
+            const row = [];
+            let setSum = 0;
+            for (let r = 1; r <= TEAM_COUNT; r += 1) {
+                const score = getClientScore(roundScores, s, r, id);
+                row.push(score);
+                setSum += score;
+            }
+            scoresBySet.push(row);
+            setTotals.push(setSum);
+            total += setSum;
+        }
+        return {
+            id,
+            displayName: getClientDisplayName(id),
+            scoresBySet,
+            setTotals,
+            total
+        };
+    });
+
+    const grandTeamTotals = sets.map((setBlock) => setBlock.setTotal);
+    const grandTotal = grandTeamTotals.reduce((a, b) => a + b, 0);
+
+    return {
+        setCount: SET_COUNT,
+        teamCount: TEAM_COUNT,
+        currentSet,
+        currentRound,
+        sets,
+        participants,
+        grandTeamTotals,
+        grandTotal,
+        generatedAt: new Date().toISOString()
+    };
+}
+
+/**
+ * @param {ReturnType<typeof buildScoresMatrix>} matrix
+ */
+function formatScoresMatrixCsv(matrix) {
+    const escape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const header = ['ID', '表示名', ...matrix.teamNames, '合計'];
+    const lines = [header.map(escape).join(',')];
+    matrix.participants.forEach((p) => {
+        lines.push(
+            [p.id, p.displayName, ...p.scores, p.total].map(escape).join(',')
+        );
+    });
+    lines.push(
+        ['', 'チーム合計', ...matrix.teamTotals, matrix.teamTotals.reduce((a, b) => a + b, 0)]
+            .map(escape)
+            .join(',')
+    );
+    return `\uFEFF${lines.join('\r\n')}`;
+}
+
+/**
+ * @param {ReturnType<typeof buildScoresMatrixAllSets>} matrix
+ */
+function formatScoresMatrixAllSetsCsv(matrix) {
+    const escape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const headerTop = ['ID', '表示名'];
+    matrix.sets.forEach((setBlock) => {
+        headerTop.push(setBlock.setName);
+        for (let i = 1; i < setBlock.teamNames.length; i += 1) {
+            headerTop.push('');
+        }
+        headerTop.push(`${setBlock.setName} 小計`);
+    });
+    headerTop.push('総合');
+
+    const headerSub = ['', ''];
+    matrix.sets.forEach((setBlock) => {
+        setBlock.teamNames.forEach((name) => headerSub.push(name));
+        headerSub.push('小計');
+    });
+    headerSub.push('');
+
+    const lines = [
+        headerTop.map(escape).join(','),
+        headerSub.map(escape).join(',')
+    ];
+
+    matrix.participants.forEach((p) => {
+        const row = [p.id, p.displayName];
+        p.scoresBySet.forEach((teamRow, idx) => {
+            row.push(...teamRow, p.setTotals[idx]);
+        });
+        row.push(p.total);
+        lines.push(row.map(escape).join(','));
+    });
+
+    const totalRow = ['', 'チーム合計'];
+    matrix.sets.forEach((setBlock) => {
+        totalRow.push(...setBlock.teamTotals, setBlock.setTotal);
+    });
+    totalRow.push(matrix.grandTotal);
+    lines.push(totalRow.map(escape).join(','));
+
+    return `\uFEFF${lines.join('\r\n')}`;
+}
+
 function disconnectDuplicateClientSockets(clientId, keepSocketId) {
     io.sockets.sockets.forEach((s) => {
         if (s.clientName === clientId && s.id !== keepSocketId) {
@@ -345,9 +739,105 @@ app.get('/api/client-names', (_req, res) => {
 app.get('/api/team-names', (_req, res) => {
     res.json({
         names: teamNames,
+        teamNamesBySet,
+        setStartLines: teamSetStartLines,
         path: teamNameSourcePath,
-        startLine: teamNameStartLine
+        currentSet,
+        setNames
     });
+});
+
+app.get('/api/set-names', (_req, res) => {
+    res.json({
+        names: setNames,
+        path: setNameSourcePath,
+        startLine: setNameStartLine
+    });
+});
+
+app.get('/api/settings/export', (_req, res) => {
+    res.json(buildSettingsSnapshot());
+});
+
+app.post('/api/settings/import', (req, res) => {
+    try {
+        const body = req.body || {};
+        if (body.clientNames?.startLine !== undefined) {
+            clientNameStartLine = Math.max(1, Math.floor(Number(body.clientNames.startLine)));
+            saveStartLine(CLIENT_NAME_START_FILE, clientNameStartLine);
+        }
+        if (Array.isArray(body.teamNames?.setStartLines)) {
+            teamSetStartLines = body.teamNames.setStartLines.slice(0, SET_COUNT).map((n, i) => {
+                const v = Number(n);
+                return Number.isFinite(v) && v >= 1 ? v : DEFAULT_TEAM_SET_START_LINES[i];
+            });
+            while (teamSetStartLines.length < SET_COUNT) {
+                teamSetStartLines.push(DEFAULT_TEAM_SET_START_LINES[teamSetStartLines.length] ?? 1);
+            }
+            saveTeamSetStartLinesToDisk();
+        }
+        if (body.setNames?.startLine !== undefined) {
+            setNameStartLine = Math.max(1, Math.floor(Number(body.setNames.startLine)));
+            saveStartLine(SET_NAME_START_FILE, setNameStartLine);
+        }
+        if (body.clientNames?.path) {
+            saveClientNameSourcePath(body.clientNames.path);
+        }
+        if (body.teamNames?.path) {
+            saveTeamNameSourcePath(body.teamNames.path);
+        }
+        if (body.setNames?.path) {
+            saveSetNameSourcePath(body.setNames.path);
+        }
+        loadClientNamesFromDisk();
+        loadTeamNamesFromDisk();
+        loadSetNamesFromDisk();
+        if (body.runtime?.currentSet) {
+            const s = Number(body.runtime.currentSet);
+            if (s >= 1 && s <= SET_COUNT) {
+                currentSet = s;
+            }
+        }
+        if (body.runtime?.currentRound) {
+            const r = Number(body.runtime.currentRound);
+            if (r >= 1 && r <= TEAM_COUNT) {
+                currentRound = r;
+            }
+        }
+        broadcastTeamNames();
+        io.emit('round-changed', currentRound);
+        io.emit('score-updated', { clients: buildClientList(), history: history.slice(-10) });
+        res.json({ ok: true, snapshot: buildSettingsSnapshot() });
+    } catch (error) {
+        res.status(500).json({ ok: false, error: String(error.message) });
+    }
+});
+
+app.get('/api/scores-matrix', (_req, res) => {
+    res.json(buildScoresMatrix());
+});
+
+app.get('/api/scores-matrix/all', (_req, res) => {
+    res.json(buildScoresMatrixAllSets());
+});
+
+app.get('/api/scores-matrix.csv', (_req, res) => {
+    const matrix = buildScoresMatrix();
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="syukei-scores-${stamp}.csv"`);
+    res.send(formatScoresMatrixCsv(matrix));
+});
+
+app.get('/api/scores-matrix-all.csv', (_req, res) => {
+    const matrix = buildScoresMatrixAllSets();
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="syukei-scores-all-sets-${stamp}.csv"`
+    );
+    res.send(formatScoresMatrixAllSetsCsv(matrix));
 });
 
 app.post('/api/client-names/load', (req, res) => {
@@ -403,17 +893,25 @@ app.post('/api/client-names/load', (req, res) => {
 
 app.post('/api/team-names/load', (req, res) => {
     try {
-        const { path: filePath, content, startLine } = req.body || {};
-        const requestedStart = startLine !== undefined
-            ? Math.max(1, Math.floor(Number(startLine)))
-            : teamNameStartLine;
+        const { path: filePath, content, setStartLines } = req.body || {};
+
+        if (Array.isArray(setStartLines)) {
+            teamSetStartLines = setStartLines.slice(0, SET_COUNT).map((n, i) => {
+                const v = Number(n);
+                return Number.isFinite(v) && v >= 1 ? v : DEFAULT_TEAM_SET_START_LINES[i];
+            });
+            while (teamSetStartLines.length < SET_COUNT) {
+                teamSetStartLines.push(DEFAULT_TEAM_SET_START_LINES[teamSetStartLines.length] ?? 1);
+            }
+            saveTeamSetStartLinesToDisk();
+        }
 
         if (typeof content === 'string') {
-            applyTeamNamesFromContent(content, requestedStart);
             if (!filePath) {
                 fs.writeFileSync(DEFAULT_TEAM_NAME_FILE, content, 'utf8');
                 teamNameSourcePath = DEFAULT_TEAM_NAME_FILE;
             }
+            applyAllTeamSetsFromContent(content);
         } else if (filePath) {
             if (!fs.existsSync(filePath)) {
                 res.status(400).json({ ok: false, error: 'ファイルが見つかりません' });
@@ -421,12 +919,8 @@ app.post('/api/team-names/load', (req, res) => {
             }
             saveTeamNameSourcePath(filePath);
             const fileContent = fs.readFileSync(filePath, 'utf8');
-            applyTeamNamesFromContent(fileContent, requestedStart);
+            applyAllTeamSetsFromContent(fileContent);
         } else {
-            if (startLine !== undefined) {
-                teamNameStartLine = requestedStart;
-                saveStartLine(TEAM_NAME_START_FILE, requestedStart);
-            }
             loadTeamNamesFromDisk();
         }
 
@@ -435,11 +929,52 @@ app.post('/api/team-names/load', (req, res) => {
         res.json({
             ok: true,
             names: teamNames,
-            path: teamNameSourcePath,
-            startLine: teamNameStartLine
+            teamNamesBySet,
+            setStartLines: teamSetStartLines,
+            path: teamNameSourcePath
         });
     } catch (error) {
         console.error('チーム名読込エラー:', error);
+        res.status(500).json({ ok: false, error: String(error.message) });
+    }
+});
+
+app.post('/api/set-names/load', (req, res) => {
+    try {
+        const { path: filePath, content, startLine } = req.body || {};
+        const requestedStart = startLine !== undefined
+            ? Math.max(1, Math.floor(Number(startLine)))
+            : setNameStartLine;
+
+        if (typeof content === 'string') {
+            applySetNamesFromContent(content, requestedStart);
+            if (!filePath) {
+                fs.writeFileSync(DEFAULT_SET_NAME_FILE, content, 'utf8');
+                setNameSourcePath = DEFAULT_SET_NAME_FILE;
+            }
+        } else if (filePath) {
+            if (!fs.existsSync(filePath)) {
+                res.status(400).json({ ok: false, error: 'ファイルが見つかりません' });
+                return;
+            }
+            saveSetNameSourcePath(filePath);
+            applySetNamesFromContent(fs.readFileSync(filePath, 'utf8'), requestedStart);
+        } else {
+            if (startLine !== undefined) {
+                setNameStartLine = requestedStart;
+                saveStartLine(SET_NAME_START_FILE, requestedStart);
+            }
+            loadSetNamesFromDisk();
+        }
+        broadcastTeamNames();
+        res.json({
+            ok: true,
+            names: setNames,
+            path: setNameSourcePath,
+            startLine: setNameStartLine
+        });
+    } catch (error) {
+        console.error('セット名読込エラー:', error);
         res.status(500).json({ ok: false, error: String(error.message) });
     }
 });
@@ -560,25 +1095,14 @@ io.on('connection', (socket) => {
             return;
         }
         
-        // スコア更新（現在のラウンドに保存）
-        if (!roundScores[currentRound]) {
-            roundScores[currentRound] = {};
-        }
-        if (!roundScores[currentRound][clientName]) {
-            roundScores[currentRound][clientName] = { name: clientName, score: 0 };
-        }
-        
-        // 同じラウンド内では上書き（加算ではなく）
-        roundScores[currentRound][clientName].score = score;
-        
-        // メタデータのみ更新（総合スコアは計算時に算出）
+        setClientScore(roundScores, currentSet, currentRound, clientName, score);
+
         scores[clientName].lastUpdate = new Date().toISOString();
-        scores[clientName].locked = true; // 送信後自動ロック
+        scores[clientName].locked = true;
         scores[clientName].entering = false;
         scores[clientName].draftScore = null;
-        
-        // 現在のラウンドの合計を計算
-        const currentRoundTotal = roundScores[currentRound][clientName].score;
+
+        const currentRoundTotal = getClientScore(roundScores, currentSet, currentRound, clientName);
         
         // 履歴追加
         history.push({
@@ -600,21 +1124,7 @@ io.on('connection', (socket) => {
         const rankingTotal = rankingClientList.reduce((sum, client) => sum + (client.score || 0), 0);
         io.emit('ranking-data', { total: rankingTotal, clients: rankingClientList, round: currentRound });
         
-        // チーム別の合計を送信
-        const teamTotals = [];
-        for (let r = 1; r <= 5; r++) {
-            let teamTotal = 0;
-            if (roundScores[r]) {
-                Object.values(roundScores[r]).forEach(client => {
-                    teamTotal += client.score || 0;
-                });
-            }
-            teamTotals.push({
-                team: teamNames[r - 1],
-                score: teamTotal
-            });
-        }
-        io.emit('team-totals', { teams: teamTotals });
+        io.emit('team-totals', buildTeamTotalsPayload());
         
         // 送信した子機にロック状態と成功通知を送信
         socket.emit('lock-status', { locked: true });
@@ -734,11 +1244,8 @@ io.on('connection', (socket) => {
             return;
         }
         
-        // 指定ラウンドのスコアをリセット
-        if (roundScores[round]) {
-            Object.keys(roundScores[round]).forEach(name => {
-                roundScores[round][name].score = 0;
-            });
+        if (typeof round === 'number' && round >= 1 && round <= TEAM_COUNT) {
+            clearRoundScoresForSet(currentSet, round);
         }
         
         Object.keys(scores).forEach(name => {
@@ -759,14 +1266,7 @@ io.on('connection', (socket) => {
     
     // 全ラウンドリセット
     socket.on('reset-all-rounds', () => {
-        // 全ラウンドのスコアをリセット
-        for (let r = 1; r <= 5; r++) {
-            if (roundScores[r]) {
-                Object.keys(roundScores[r]).forEach(name => {
-                    roundScores[r][name].score = 0;
-                });
-            }
-        }
+        clearAllRoundScoresForSet(currentSet);
         
         Object.keys(scores).forEach(name => {
             scores[name].locked = false;
@@ -787,9 +1287,11 @@ io.on('connection', (socket) => {
         io.emit('lock-status', { locked: false });
         
         // 全ラウンド合計も更新
-        io.emit('all-rounds-total', {
-            roundTotals: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
-        });
+        const roundTotals = {};
+        for (let r = 1; r <= TEAM_COUNT; r += 1) {
+            roundTotals[r] = 0;
+        }
+        io.emit('all-rounds-total', { roundTotals });
     });
     
     // 旧リセット（後方互換性のため残す）
@@ -849,17 +1351,11 @@ io.on('connection', (socket) => {
         // 各ラウンドの合計点を計算してランキング作成
         const roundRankings = [];
         
-        for (let r = 1; r <= 5; r++) {
-            // このラウンドの全子機の合計点を計算
-            let roundTotal = 0;
-            Object.keys(roundScores[r] || {}).forEach(name => {
-                roundTotal += roundScores[r][name]?.score || 0;
-            });
-            
+        for (let r = 1; r <= TEAM_COUNT; r += 1) {
             roundRankings.push({
                 rank: 0,
-                name: `R${r}`,
-                score: roundTotal
+                name: teamNames[r - 1] || `R${r}`,
+                score: sumTeamRound(currentSet, r)
             });
         }
         
@@ -898,14 +1394,30 @@ io.on('connection', (socket) => {
         console.log(`チーム変更: チーム${teamNames[round - 1]}`);
         io.emit('round-changed', round);
     });
+
+    socket.on('change-set', (set) => {
+        const s = Number(set);
+        if (!Number.isFinite(s) || s < 1 || s > SET_COUNT) {
+            return;
+        }
+        currentSet = s;
+        syncActiveTeamNames();
+        console.log(`セット変更: ${setNames[currentSet - 1]}`);
+        broadcastTeamNames();
+        io.emit('score-updated', {
+            clients: buildClientList(),
+            history: history.slice(-10)
+        });
+        io.emit('team-totals', buildTeamTotalsPayload());
+    });
     
     // ラウンド別データリクエスト
     socket.on('request-round-data', (round) => {
-        if (round !== 'total' && !roundScores[round]) {
-            roundScores[round] = {};
+        if (round !== 'total' && typeof round === 'number') {
+            ensureTeamBucket(roundScores, currentSet, round);
         }
         const clientList = buildClientList(round === 'total' ? 'total' : round);
-        socket.emit('round-data', { round, clients: clientList });
+        socket.emit('round-data', { round, set: currentSet, clients: clientList });
     });
     
     // 現在のラウンドリクエスト
@@ -913,9 +1425,24 @@ io.on('connection', (socket) => {
         socket.emit('current-round', currentRound);
     });
     
+    socket.on('request-current-set', () => {
+        socket.emit('current-set', {
+            set: currentSet,
+            setName: setNames[currentSet - 1],
+            teamNames,
+            setNames
+        });
+    });
+
     // チーム名をリクエスト
     socket.on('request-team-names', () => {
-        socket.emit('team-names', { teamNames });
+        socket.emit('team-names', {
+            teamNames,
+            currentSet,
+            setNames,
+            teamNamesBySet,
+            teamSetStartLines
+        });
     });
 
     socket.on('request-client-display-names', () => {
@@ -930,13 +1457,8 @@ io.on('connection', (socket) => {
         const totals = {};
         
         // 各クライアントの総合得点を計算
-        Object.keys(scores).forEach(name => {
-            totals[name] = 0;
-            for (let r = 1; r <= 5; r++) {
-                if (roundScores[r] && roundScores[r][name]) {
-                    totals[name] += roundScores[r][name].score || 0;
-                }
-            }
+        Object.keys(scores).forEach((name) => {
+            totals[name] = scoreForClientInSet(roundScores, currentSet, name, 'total');
         });
         
         console.log('各子機の総合得点を送信:', totals);
@@ -945,23 +1467,9 @@ io.on('connection', (socket) => {
     
     // チーム別の合計をリクエスト（各チームA~Fの合計）
     socket.on('request-team-totals', () => {
-        const teamTotals = [];
-        
-        for (let r = 1; r <= 5; r++) {
-            let teamTotal = 0;
-            if (roundScores[r]) {
-                Object.values(roundScores[r]).forEach(client => {
-                    teamTotal += client.score || 0;
-                });
-            }
-            teamTotals.push({
-                team: teamNames[r - 1],
-                score: teamTotal
-            });
-        }
-        
-        console.log('チーム別合計を送信:', teamTotals);
-        socket.emit('team-totals', { teams: teamTotals });
+        const payload = buildTeamTotalsPayload();
+        console.log('チーム別合計を送信:', payload);
+        socket.emit('team-totals', payload);
     });
     
     // 子機情報をリクエスト
@@ -973,17 +1481,26 @@ io.on('connection', (socket) => {
     });
     
     // 全ラウンドの全子機データをリクエスト
+    socket.on('request-scores-matrix', () => {
+        socket.emit('scores-matrix', buildScoresMatrix());
+    });
+
+    socket.on('request-scores-matrix-all', () => {
+        socket.emit('scores-matrix-all', buildScoresMatrixAllSets());
+    });
+
     socket.on('request-all-rounds-data', () => {
         const allRoundsData = {};
         
-        for (let r = 1; r <= 5; r++) {
-            allRoundsData[r] = Object.keys(scores).map(name => {
-                const roundScore = roundScores[r]?.[name]?.score;
+        for (let r = 1; r <= TEAM_COUNT; r += 1) {
+            allRoundsData[r] = Object.keys(scores).map((name) => {
+                const bucket = roundScores[currentSet]?.[r];
+                const roundScore = bucket?.[name]?.score;
                 return {
                     name,
                     score: roundScore !== undefined ? roundScore : null,
                     locked: scores[name].locked,
-                    lastUpdate: roundScores[r]?.[name]?.lastUpdate || scores[name].lastUpdate
+                    lastUpdate: bucket?.[name]?.lastUpdate || scores[name].lastUpdate
                 };
             });
         }
@@ -1014,36 +1531,15 @@ io.on('connection', (socket) => {
             delete scores[regularTestName];
         }
         
-        // 全ラウンドから削除
-        for (let r = 1; r <= 5; r++) {
-            if (roundScores[r]) {
-                if (roundScores[r]['__TEST__']) {
-                    delete roundScores[r]['__TEST__'];
-                }
-                if (roundScores[r][regularTestName]) {
-                    delete roundScores[r][regularTestName];
-                }
-            }
-        }
-        
+        deleteTestClientFromCurrentSet('__TEST__');
+        deleteTestClientFromCurrentSet(regularTestName);
+
         io.emit('score-updated', {
             clients: buildClientList(),
             history: history.slice(-10)
         });
-        
-        // チーム合計も更新
-        const teamTotals = {};
-        for (let r = 1; r <= 5; r++) {
-            teamTotals[r] = 0;
-            if (roundScores[r]) {
-                Object.keys(roundScores[r]).forEach(name => {
-                    if (!scores[name] || !scores[name].isTest) {
-                        teamTotals[r] += roundScores[r][name].score || 0;
-                    }
-                });
-            }
-        }
-        io.emit('team-totals', teamTotals);
+
+        io.emit('team-totals', buildTeamTotalsPayload());
     });
     
     // テスト用点数設定
@@ -1054,16 +1550,7 @@ io.on('connection', (socket) => {
         // テスト用の仮想クライアント名
         const testClientName = testMode ? '__TEST__' : teamNames[0];
         
-        // ラウンドデータを初期化
-        if (!roundScores[round]) {
-            roundScores[round] = {};
-        }
-        if (!roundScores[round][testClientName]) {
-            roundScores[round][testClientName] = { name: testClientName, score: 0 };
-        }
-        
-        // スコアを設定
-        roundScores[round][testClientName].score = score;
+        setClientScore(roundScores, currentSet, round, testClientName, score);
         
         // メタデータも作成
         if (!scores[testClientName]) {
@@ -1084,23 +1571,10 @@ io.on('connection', (socket) => {
             history: history.slice(-10)
         });
         
-        // チーム合計も更新
-        const teamTotals = {};
-        for (let r = 1; r <= 5; r++) {
-            teamTotals[r] = 0;
-            if (roundScores[r]) {
-                Object.keys(roundScores[r]).forEach(name => {
-                    if (!scores[name] || !scores[name].isTest) {
-                        teamTotals[r] += roundScores[r][name].score || 0;
-                    }
-                });
-            }
-        }
-        io.emit('team-totals', teamTotals);
-        
-        // ランキングデータも更新（テストモードOFFの場合のみランキング表示用データを送る）
+        io.emit('team-totals', buildTeamTotalsPayload());
+
         const rankingClientList = testMode
-            ? [{ name: teamNames[0], score: roundScores[round]?.['__TEST__']?.score || 0 }]
+            ? [{ name: teamNames[0], score: getClientScore(roundScores, currentSet, round, '__TEST__') }]
             : buildRankingClientList(round);
         
         const rankingTotal = rankingClientList.reduce((sum, client) => sum + (client.score || 0), 0);
@@ -1180,12 +1654,7 @@ io.on('connection', (socket) => {
             // メタデータを削除
             delete scores[disconnectedClient];
             
-            // 全ラウンドのスコアを削除
-            for (let r = 1; r <= 5; r++) {
-                if (roundScores[r] && roundScores[r][disconnectedClient]) {
-                    delete roundScores[r][disconnectedClient];
-                }
-            }
+            removeClientFromRoundScores(disconnectedClient);
             
             console.log(`子機データ削除: ${disconnectedClient}`);
         }
@@ -1198,21 +1667,7 @@ io.on('connection', (socket) => {
             clients: clientList
         });
         
-        // チーム別の合計も更新
-        const teamTotals = [];
-        for (let r = 1; r <= 5; r++) {
-            let teamTotal = 0;
-            if (roundScores[r]) {
-                Object.values(roundScores[r]).forEach(client => {
-                    teamTotal += client.score || 0;
-                });
-            }
-            teamTotals.push({
-                team: teamNames[r - 1],
-                score: teamTotal
-            });
-        }
-        io.emit('team-totals', { teams: teamTotals });
+        io.emit('team-totals', buildTeamTotalsPayload());
     });
 });
 
@@ -1243,12 +1698,14 @@ function startServer() {
 子機: http://localhost:${PORT}/client
 ランキング: http://localhost:${PORT}/ranking
 観覧用: http://localhost:${PORT}/viewer.html
+点数一覧(CSV): http://localhost:${PORT}/scores-table.html
 
 【別のPC・タブレット・スマホ】
 親機: http://${localIP}:${PORT}
 子機: http://${localIP}:${PORT}/client
 ランキング: http://${localIP}:${PORT}/ranking
 観覧用: http://${localIP}:${PORT}/viewer.html
+点数一覧(CSV): http://${localIP}:${PORT}/scores-table.html
 
 【子機をキオスクモードで起動】
 Chromeキオスクモード（終了はAlt+F4）:
