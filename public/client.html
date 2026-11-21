@@ -324,9 +324,15 @@
 
         function addNumber(num) {
             if (isLocked) return;
-            
-            const newScore = currentScore * 10 + num;
-            
+
+            let newScore;
+            if (!testMode) {
+                // 1〜9 は押すたびにその数字に置き換え（決定前の打ち直し）。10点は「10」ボタン
+                newScore = num;
+            } else {
+                newScore = currentScore * 10 + num;
+            }
+
             if (!testMode && newScore > MAX_SCORE) {
                 showError(`${MAX_SCORE}点を超えることはできません`);
                 return;
@@ -422,36 +428,15 @@
                 return;
             }
             
-            // 通常モード: 10点制限
+            // 通常モード: 決定までグレーアウトしない（10点超は addNumber で弾く）
             const tenBtn = document.getElementById('tenBtn');
-            if (currentScore === 0) {
-                buttons.forEach(btn => {
-                    btn.classList.remove('disabled-btn');
-                    btn.disabled = false;
-                });
-                if (tenBtn) {
-                    tenBtn.classList.remove('disabled-btn');
-                    tenBtn.disabled = false;
-                }
-            } else if (currentScore >= 1 && currentScore < MAX_SCORE) {
-                // 1桁入力済み: 2桁にすると10超になるため数字は無効（10ボタンで10点にできる）
-                buttons.forEach(btn => {
-                    btn.classList.add('disabled-btn');
-                    btn.disabled = true;
-                });
-                if (tenBtn) {
-                    tenBtn.classList.remove('disabled-btn');
-                    tenBtn.disabled = false;
-                }
-            } else if (currentScore >= MAX_SCORE) {
-                buttons.forEach(btn => {
-                    btn.classList.add('disabled-btn');
-                    btn.disabled = true;
-                });
-                if (tenBtn) {
-                    tenBtn.classList.add('disabled-btn');
-                    tenBtn.disabled = true;
-                }
+            buttons.forEach(btn => {
+                btn.classList.remove('disabled-btn');
+                btn.disabled = false;
+            });
+            if (tenBtn) {
+                tenBtn.classList.remove('disabled-btn');
+                tenBtn.disabled = false;
             }
         }
 
