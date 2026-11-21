@@ -12,5 +12,6 @@ alwaysApply: true
 
 # ビルド（syukei）
 
+- **コード変更後は原則 `ビルド.bat`（または `npm run dist:all`）まで実行する**（ユーザーが「ビルド不要」と言ったときのみ省略）。
 - **`npm run dist:all` / ビルド前**に `node scripts/stop-syukei-for-build.js` で親機・子機 exe を終了する（ロック回避）。
 - ローカル確認は **`ビルド.bat`** のあと **`親機起動.bat` / `子機起動.bat`**（`dist\*\win-unpacked` があればそちらを優先）。
