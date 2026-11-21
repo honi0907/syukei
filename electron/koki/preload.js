@@ -18,7 +18,11 @@ function createUpdateApi() {
 
 contextBridge.exposeInMainWorld('kokiAPI', {
     getDefaultHost: () => ipcRenderer.invoke('koki:get-default-host'),
-    connect: (host, fullscreen) => ipcRenderer.invoke('koki:connect', { host, fullscreen }),
+    getDefaultClientId: () => ipcRenderer.invoke('koki:get-default-client-id'),
+    pingServer: (host) => ipcRenderer.invoke('koki:ping-server', host),
+    fetchClientNames: (host) => ipcRenderer.invoke('koki:fetch-client-names', host),
+    connect: (host, fullscreen, clientId) =>
+        ipcRenderer.invoke('koki:connect', { host, fullscreen, clientId }),
     getAppVersion: () => ipcRenderer.invoke('app:version'),
     ...createUpdateApi()
 });

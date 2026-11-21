@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="styles.css">
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/ranking-settings.js" defer></script>
+    <script src="/js/client-name-settings.js" defer></script>
+    <script src="/js/team-name-settings.js" defer></script>
 </head>
 <body class="settings-page">
     <div class="settings-shell">
@@ -16,6 +18,8 @@
                 <p>得点発表の見た目・動き</p>
             </div>
             <nav class="settings-nav">
+                <button type="button" class="settings-nav-item" data-panel="client-names">子機名</button>
+                <button type="button" class="settings-nav-item" data-panel="team-names">チーム名</button>
                 <button type="button" class="settings-nav-item active" data-panel="layout">レイアウト</button>
                 <button type="button" class="settings-nav-item" data-panel="animation">アニメーション</button>
                 <button type="button" class="settings-nav-item" data-panel="digit-style">数字の見た目</button>
@@ -26,6 +30,70 @@
         </aside>
 
         <main class="settings-main">
+            <section id="panel-client-names" class="settings-panel">
+                <header class="settings-panel-header">
+                    <h2>子機名</h2>
+                    <p>ID1〜ID10 の表示名。1ファイルにまとめておき、「開始行」でどの行から読むか切り替えられます。空行は ID のままです。</p>
+                </header>
+
+                <div class="settings-field">
+                    <label for="clientNameStartLine">読み始める行（1行目＝1）</label>
+                    <input type="number" id="clientNameStartLine" min="1" max="9999" value="1" class="settings-number-input">
+                    <p class="settings-field-hint">例: 11 にするとメモ帳の11行目が ID1 になります。</p>
+                </div>
+
+                <div class="settings-field">
+                    <label for="clientNameFilePath">参照ファイル</label>
+                    <div class="settings-file-row">
+                        <input type="text" id="clientNameFilePath" class="settings-text-input" readonly placeholder="未設定（clientname.txt）">
+                        <button type="button" id="browseClientNameFileBtn" class="btn btn-secondary">参照…</button>
+                    </div>
+                    <input type="file" id="clientNameFileInput" accept=".txt,text/plain" hidden>
+                </div>
+
+                <div class="settings-field">
+                    <button type="button" id="reloadClientNameFileBtn" class="btn btn-primary">ファイルから読み込む</button>
+                    <p id="clientNameLoadStatus" class="settings-load-status" aria-live="polite"></p>
+                </div>
+
+                <div class="settings-field">
+                    <label id="clientNamePreviewLabel">プレビュー</label>
+                    <ol id="clientNamePreviewList" class="client-name-preview-list"></ol>
+                </div>
+            </section>
+
+            <section id="panel-team-names" class="settings-panel">
+                <header class="settings-panel-header">
+                    <h2>チーム名</h2>
+                    <p>1セット5チーム（A〜E）。子機名と同様にファイル参照と開始行で切り替えできます。</p>
+                </header>
+
+                <div class="settings-field">
+                    <label for="teamNameStartLine">読み始める行（1行目＝1）</label>
+                    <input type="number" id="teamNameStartLine" min="1" max="9999" value="1" class="settings-number-input">
+                    <p class="settings-field-hint">例: 6 にすると6行目から5行分がチームA〜E になります。</p>
+                </div>
+
+                <div class="settings-field">
+                    <label for="teamNameFilePath">参照ファイル</label>
+                    <div class="settings-file-row">
+                        <input type="text" id="teamNameFilePath" class="settings-text-input" readonly placeholder="未設定（teamname.txt）">
+                        <button type="button" id="browseTeamNameFileBtn" class="btn btn-secondary">参照…</button>
+                    </div>
+                    <input type="file" id="teamNameFileInput" accept=".txt,text/plain" hidden>
+                </div>
+
+                <div class="settings-field">
+                    <button type="button" id="reloadTeamNameFileBtn" class="btn btn-primary">ファイルから読み込む</button>
+                    <p id="teamNameLoadStatus" class="settings-load-status" aria-live="polite"></p>
+                </div>
+
+                <div class="settings-field">
+                    <label id="teamNamePreviewLabel">プレビュー</label>
+                    <ol id="teamNamePreviewList" class="client-name-preview-list"></ol>
+                </div>
+            </section>
+
             <section id="panel-layout" class="settings-panel active">
                 <header class="settings-panel-header">
                     <h2>レイアウト</h2>
@@ -67,7 +135,7 @@
             <section id="panel-animation" class="settings-panel">
                 <header class="settings-panel-header">
                     <h2>アニメーション</h2>
-                    <p>桁の停止タイミングと100点演出</p>
+                    <p>桁の停止タイミングと満点（30点）演出</p>
                 </header>
 
                 <div class="settings-field-row">
@@ -84,7 +152,7 @@
                 </div>
 
                 <div class="settings-field">
-                    <label for="perfectEffect">100点演出</label>
+                    <label for="perfectEffect">満点（30点）演出</label>
                     <select id="perfectEffect" onchange="updatePerfectEffect()">
                         <option value="none">なし</option>
                         <option value="confetti">紙吹雪</option>

@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const fs = require('fs');
 const { registerAppUpdateIpc } = require('./app-updater');
 const { getBrowserWindowIcon } = require('./app-icon');
 const { repairDesktopShortcutIfPresent } = require('./repair-desktop-shortcut');
@@ -511,6 +512,18 @@ ipcMain.handle('app:version', () => ({
 }));
 
 registerAppUpdateIpc(ipcMain, app, 'parent');
+
+ipcMain.handle('settings:pick-text-file', async () => {
+    const result = await dialog.showOpenDialog({
+        title: '子機名リスト（1〜10行）',
+        filters: [{ name: 'テキスト', extensions: ['txt'] }],
+        properties: ['openFile']
+    });
+    if (result.canceled || !result.filePaths?.[0]) {
+        return null;
+    }
+    return { path: result.filePaths[0] };
+});
 
 if (process.platform === 'win32') {
     app.setAppUserModelId('jp.syukei.parent');

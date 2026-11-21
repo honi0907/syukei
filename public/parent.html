@@ -26,14 +26,14 @@
                     <button class="btn btn-primary btn-full" onclick="showRanking()">
                         ウィンドウ表示
                     </button>
-                    <button class="btn btn-warning btn-full" onclick="showRankingFullscreen()">
+                    <button class="btn btn-primary btn-full" onclick="showRankingFullscreen()">
                         フルスクリーン表示
                     </button>
                     <div class="button-row-action">
                         <button class="btn btn-danger btn-action btn-go" onclick="triggerGo()">
                             得点GO!
                         </button>
-                        <button class="btn btn-info btn-action" onclick="resetRanking()">
+                        <button class="btn btn-primary btn-action" onclick="resetRanking()">
                             リセット
                         </button>
                     </div>
@@ -44,21 +44,17 @@
             <div class="control-card">
                 <h3>システム</h3>
                 <div class="button-group">
-                    <div class="button-row">
-                        <button class="btn btn-success btn-full" onclick="unlockAll()">
-                            ロック解除
-                        </button>
-                        <button class="btn btn-warning btn-full" onclick="lockAll()">
-                            ロック
-                        </button>
-                    </div>
-                    <button class="btn btn-secondary btn-full" onclick="resetCurrentRound()">
+                    <button type="button" id="toggleLockAllBtn" class="btn btn-lock-toggle btn-full"
+                            onclick="toggleLockAll()" aria-pressed="false">
+                        ロック
+                    </button>
+                    <button class="btn btn-primary btn-full" onclick="resetCurrentRound()">
                         現在のラウンドをリセット
                     </button>
                     <button class="btn btn-danger btn-full" onclick="resetAllRounds()">
                         全ラウンドリセット
                     </button>
-                    <button class="btn btn-secondary btn-full" onclick="openSettings()">
+                    <button class="btn btn-primary btn-full" onclick="openSettings()">
                         設定…
                     </button>
                 </div>
@@ -74,12 +70,18 @@
                 </div>
                 <div class="table-wrapper">
                     <table class="score-table">
+                        <colgroup>
+                            <col class="col-client">
+                            <col class="col-score">
+                            <col class="col-status">
+                            <col class="col-remind">
+                        </colgroup>
                         <thead>
                             <tr>
-                                <th>子機名</th>
-                                <th>点数</th>
-                                <th>状態</th>
-                                <th>最終更新</th>
+                                <th class="col-client-head">子機名</th>
+                                <th class="col-score-head">点数</th>
+                                <th class="col-status-head">状態</th>
+                                <th class="col-remind-head">催促</th>
                             </tr>
                         </thead>
                         <tbody id="scoreTableBody">
@@ -103,11 +105,11 @@
             <div class="round-card">
                 <h3>チーム選択</h3>
                 <div class="round-selector-buttons">
-                    <button class="btn-round" onclick="switchRound(1)">A</button>
-                    <button class="btn-round" onclick="switchRound(2)">B</button>
-                    <button class="btn-round" onclick="switchRound(3)">C</button>
-                    <button class="btn-round" onclick="switchRound(4)">D</button>
-                    <button class="btn-round" onclick="switchRound(5)">E</button>
+                    <button type="button" class="btn btn-round" onclick="switchRound(1)">A</button>
+                    <button type="button" class="btn btn-round" onclick="switchRound(2)">B</button>
+                    <button type="button" class="btn btn-round" onclick="switchRound(3)">C</button>
+                    <button type="button" class="btn btn-round" onclick="switchRound(4)">D</button>
+                    <button type="button" class="btn btn-round" onclick="switchRound(5)">E</button>
                 </div>
                 <div class="current-round-display">
                     現在: <span id="currentRoundLabel">チームA</span>
@@ -131,7 +133,35 @@
         const socket = io();
         let clients = [];
         let currentRound = 1;
-        let teamNames = ['A', 'B', 'C', 'D', 'E', 'F']; // デフォルト
+        let teamNames = ['A', 'B', 'C', 'D', 'E']; // デフォルト（5チーム）
+        const REMIND_PRESS_MS = 5000;
+        const remindPressedClients = new Set();
+        const remindPressTimers = new Map();
+
+        function clearRemindPressTimer(clientName) {
+            const timer = remindPressTimers.get(clientName);
+            if (timer) {
+                clearTimeout(timer);
+                remindPressTimers.delete(clientName);
+            }
+        }
+
+        function endRemindPress(clientName) {
+            clearRemindPressTimer(clientName);
+            remindPressedClients.delete(clientName);
+            updateDisplay();
+        }
+
+        function startRemindPress(clientName, durationMs) {
+            clearRemindPressTimer(clientName);
+            remindPressedClients.add(clientName);
+            updateDisplay();
+            const ms = typeof durationMs === 'number' && durationMs > 0 ? durationMs : REMIND_PRESS_MS;
+            remindPressTimers.set(
+                clientName,
+                setTimeout(() => endRemindPress(clientName), ms)
+            );
+        }
 
         // チーム名を受信
         socket.on('team-names', (data) => {
@@ -173,111 +203,80 @@
             updateDisplay();
         });
 
-        let draggedElement = null;
-        let draggedIndex = null;
-
-        function setupDragAndDrop() {
-            const rows = document.querySelectorAll('.draggable-row');
-            
-            rows.forEach(row => {
-                row.addEventListener('dragstart', handleDragStart);
-                row.addEventListener('dragover', handleDragOver);
-                row.addEventListener('drop', handleDrop);
-                row.addEventListener('dragenter', handleDragEnter);
-                row.addEventListener('dragleave', handleDragLeave);
-                row.addEventListener('dragend', handleDragEnd);
-            });
-        }
-
-        function handleDragStart(e) {
-            draggedElement = this;
-            draggedIndex = parseInt(this.dataset.index);
-            this.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/html', this.innerHTML);
-        }
-
-        function handleDragOver(e) {
-            if (e.preventDefault) {
-                e.preventDefault();
+        socket.on('remind-started', (data) => {
+            if (data?.clientName) {
+                startRemindPress(data.clientName, data.durationMs);
             }
-            e.dataTransfer.dropEffect = 'move';
-            return false;
-        }
+        });
 
-        function handleDragEnter(e) {
-            if (this !== draggedElement) {
-                this.classList.add('drag-over');
+        socket.on('remind-ended', (data) => {
+            if (data?.clientName) {
+                endRemindPress(data.clientName);
             }
+        });
+
+        function clientLabel(c) {
+            return c.displayName || c.name;
         }
 
-        function handleDragLeave(e) {
-            this.classList.remove('drag-over');
-        }
-
-        function handleDrop(e) {
-            if (e.stopPropagation) {
-                e.stopPropagation();
+        function formatStatusCell(c) {
+            if (c.unlockRequested) {
+                const id = c.name.replace(/'/g, "\\'");
+                return `<button class="status-badge unlock-request-badge" onclick="unlockClient('${id}')">解除申請</button>`;
             }
-            
-            if (draggedElement !== this) {
-                const dropIndex = parseInt(this.dataset.index);
-                
-                // 配列の要素を入れ替え
-                const draggedClient = clients[draggedIndex];
-                clients.splice(draggedIndex, 1);
-                clients.splice(dropIndex, 0, draggedClient);
-                
-                // 表示を更新
-                updateDisplay();
+            if (c.locked) {
+                return '<span class="status-badge locked">ロック中</span>';
             }
-            
-            return false;
-        }
-
-        function handleDragEnd(e) {
-            const rows = document.querySelectorAll('.draggable-row');
-            rows.forEach(row => {
-                row.classList.remove('dragging', 'drag-over');
-            });
+            if (c.entering) {
+                return '<span class="status-badge entering">入力中</span>';
+            }
+            return '<span class="status-badge unlocked">入力可能</span>';
         }
 
         function updateDisplay() {
-            // 合計計算（scoreがundefinedの場合は0として扱う）
-            const total = clients.reduce((sum, c) => sum + (c.score || 0), 0);
+            const connectedClients = clients.filter((c) => c.connected);
+            const total = connectedClients.reduce((sum, c) => sum + (c.score || 0), 0);
             document.getElementById('totalScore').textContent = total.toLocaleString();
-            document.getElementById('clientCount').textContent = clients.length;
+            document.getElementById('clientCount').textContent = connectedClients.length;
 
-            // スコアテーブル更新
             const tbody = document.getElementById('scoreTableBody');
-            if (clients.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="no-data">データなし</td></tr>';
-            } else {
-                tbody.innerHTML = clients.map((c, index) => `
-                    <tr draggable="true" data-index="${index}" class="draggable-row">
-                        <td class="client-name-cell"><span class="drag-handle">⋮⋮</span> ${c.name}</td>
-                        <td class="score-value">${c.score || 0}点</td>
-                        <td>
-                            ${c.unlockRequested 
-                                ? `<button class="status-badge unlock-request-badge" onclick="unlockClient('${c.name}')">
-                                    解除申請
-                                   </button>`
-                                : `<span class="status-badge ${c.locked ? 'locked' : 'unlocked'}">
-                                    ${c.locked ? 'ロック中' : '入力可能'}
-                                   </span>`
-                            }
-                        </td>
-                        <td class="time-cell">${new Date(c.lastUpdate).toLocaleTimeString('ja-JP')}</td>
-                    </tr>
-                `).join('');
-                
-                // ドラッグ&ドロップイベントを設定
-                setupDragAndDrop();
+            if (connectedClients.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="no-data">子機からの接続を待っています...</td></tr>';
+                return;
             }
+
+            updateLockToggleButton();
+
+            tbody.innerHTML = connectedClients.map((c) => {
+                const id = c.name.replace(/'/g, "\\'");
+                const idNote = c.displayName && c.displayName !== c.name
+                    ? `<span class="client-id-sub">${c.name}</span>`
+                    : '';
+                const scoreClass = c.entering && c.draftScore !== null
+                    ? 'score-value score-value-entering'
+                    : 'score-value';
+                const remindClass = remindPressedClients.has(c.name)
+                    ? 'btn-remind is-pressed'
+                    : 'btn-remind';
+                return `
+                    <tr>
+                        <td class="client-name-cell">${clientLabel(c)}${idNote}</td>
+                        <td class="${scoreClass}">${c.score ?? 0}点</td>
+                        <td class="status-cell">${formatStatusCell(c)}</td>
+                        <td class="remind-cell">
+                            <button type="button" class="${remindClass}" onclick="remindClient('${id}')">催促</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
         
         function unlockClient(clientName) {
             socket.emit('unlock-client', { clientName });
+        }
+
+        function remindClient(clientName) {
+            socket.emit('remind-client', { clientName });
         }
 
         async function isServerRunning() {
@@ -330,6 +329,39 @@
         function triggerGo() {
             // 全てのランキングウィンドウに得点GO信号を送信
             socket.emit('trigger-go');
+        }
+
+        function updateLockToggleButton() {
+            const btn = document.getElementById('toggleLockAllBtn');
+            if (!btn) {
+                return;
+            }
+            const connected = clients.filter((c) => c.connected);
+            if (connected.length === 0) {
+                btn.textContent = 'ロック';
+                btn.disabled = true;
+                btn.setAttribute('aria-pressed', 'false');
+                btn.classList.remove('is-toggle-pressed');
+                return;
+            }
+            btn.disabled = false;
+            const allLocked = connected.every((c) => c.locked);
+            btn.textContent = allLocked ? 'ロック解除' : 'ロック';
+            btn.setAttribute('aria-pressed', allLocked ? 'true' : 'false');
+            btn.classList.toggle('is-toggle-pressed', allLocked);
+        }
+
+        function toggleLockAll() {
+            const connected = clients.filter((c) => c.connected);
+            if (connected.length === 0) {
+                return;
+            }
+            const allLocked = connected.every((c) => c.locked);
+            if (allLocked) {
+                socket.emit('unlock-all');
+            } else {
+                socket.emit('lock-all');
+            }
         }
 
         function unlockAll() {
@@ -411,6 +443,10 @@
             // 完全に新しいデータで置き換え
             clients = data.clients || [];
             updateDisplay();
+        });
+
+        socket.on('client-display-names', () => {
+            socket.emit('request-clients');
         });
 
         socket.on('connect', () => {

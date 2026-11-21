@@ -845,10 +845,28 @@
 
     <script>
         const socket = io();
+        const SCORE_DISPLAY_MAX = 30;
+        const GREAT_MIN_SCORE = 20;
+        const GOOD_MIN_SCORE = 1;
+
+        function clampRankingScore(score) {
+            return Math.max(0, Math.min(SCORE_DISPLAY_MAX, Number(score) || 0));
+        }
+
+        function isGreatRankingBand(score) {
+            const s = clampRankingScore(score);
+            return s >= GREAT_MIN_SCORE && s <= SCORE_DISPLAY_MAX;
+        }
+
+        function isGoodRankingBand(score) {
+            const s = clampRankingScore(score);
+            return s >= GOOD_MIN_SCORE && s < GREAT_MIN_SCORE;
+        }
+
         let totalScore = 0;
         let animationRunning = false;
         let currentClientName = '';
-        let teamNames = ['A', 'B', 'C', 'D', 'E', 'F']; // デフォルト
+        let teamNames = ['A', 'B', 'C', 'D', 'E']; // デフォルト（5チーム）
         let currentTeamName = ''; // 現在表示中のチーム名
         let perfectEffect = 'none';
         
@@ -1593,11 +1611,12 @@
             console.log('topBand element:', topBand);
             console.log('topBand initial transform:', window.getComputedStyle(topBand).transform);
             
-            // スコアに応じて帯画像を選択（中央画像は使わない）
-            if (score >= 80) {
+            const bandScore = clampRankingScore(score);
+            // 20〜30点: GREAT / 1〜19点: GOOD（30点満点想定）
+            if (isGreatRankingBand(bandScore)) {
                 topBandImg.src = '/gazou/excellent_obi.png';
                 bottomBandImg.src = '/gazou/excellent_obi.png';
-            } else if (score >= 0) {
+            } else if (isGoodRankingBand(bandScore) || bandScore === 0) {
                 topBandImg.src = '/gazou/good_obi.png';
                 bottomBandImg.src = '/gazou/good_obi.png';
             } else {
@@ -1610,7 +1629,7 @@
             updateCompanyName(currentTeamName);
             
             // 画像表示
-            if (score >= 0) {
+            if (bandScore >= 0) {
                 console.log('Score >= 0, showing overlay and starting animation');
                 overlayContainer.classList.add('show');
                 
@@ -1627,11 +1646,11 @@
                     
                     // スコアに応じてSEを再生（0.2秒遅延）
                     setTimeout(() => {
-                        if (score >= 80) {
+                        if (isGreatRankingBand(bandScore)) {
                             const excellentSound = document.getElementById('soundExcellent');
                             excellentSound.currentTime = 0;
                             excellentSound.play();
-                        } else if (score >= 0) {
+                        } else if (isGoodRankingBand(bandScore) || bandScore === 0) {
                             const goodSound = document.getElementById('soundGood');
                             goodSound.currentTime = 0;
                             goodSound.play();
@@ -1639,8 +1658,8 @@
                     }, 200);
                 }, 100);
                 
-                // 100点ピッタリの時だけ特別演出
-                if (score === 100) {
+                // 満点（30点）のときだけ特別演出
+                if (bandScore === SCORE_DISPLAY_MAX) {
                     setTimeout(() => {
                         if (perfectEffect === 'confetti') {
                             createConfetti();
@@ -1705,8 +1724,7 @@
                 });
             }, stopTiming.digit2);
             
-            // 表示点数を合計-1に変更（最小0、最大99）
-            const displayScore = Math.max(0, Math.min(99, totalScore - 1));
+            const displayScore = clampRankingScore(totalScore);
             
             // 数字を分解（最大2桁）
             const digits = String(displayScore).padStart(2, '0').split('').map(Number);

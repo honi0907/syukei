@@ -11,6 +11,11 @@
     "public/**/*",
     "server.js",
     "teamname.txt",
+    "teamname-path.txt",
+    "teamname-startline.txt",
+    "clientname.txt",
+    "clientname-path.txt",
+    "clientname-startline.txt",
     "package.json",
     "node_modules/**/*"
   ],
@@ -24,6 +29,11 @@
     "package.json",
     "public/**/*",
     "teamname.txt",
+    "teamname-path.txt",
+    "teamname-startline.txt",
+    "clientname.txt",
+    "clientname-path.txt",
+    "clientname-startline.txt",
     "node_modules/**/*"
   ],
   "win": {

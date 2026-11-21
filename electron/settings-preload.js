@@ -1,3 +1,5 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('syukeiDesktop', {});
+contextBridge.exposeInMainWorld('syukeiSettings', {
+    pickTextFile: () => ipcRenderer.invoke('settings:pick-text-file')
+});

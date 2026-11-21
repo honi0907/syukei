@@ -7,6 +7,14 @@
     <link rel="stylesheet" href="styles.css">
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/server-host.js"></script>
+    <script>
+        (function () {
+            const p = new URLSearchParams(window.location.search);
+            if (p.get('electron') === '1' && p.get('skipLogin') === '1' && p.get('clientId')) {
+                document.documentElement.classList.add('electron-auto-connect');
+            }
+        })();
+    </script>
 </head>
 <body class="client-page">
     <!-- ログイン画面 -->
@@ -14,8 +22,21 @@
         <div class="login-card">
             <h1>子機 初期設定</h1>
             <div class="login-form">
-                <label for="clientName">子機名</label>
-                <input type="text" id="clientName" placeholder="例: 子機1" value="子機1">
+                <label for="clientId">子機ID</label>
+                <select id="clientId" class="client-id-select">
+                    <option value="ID1">ID1</option>
+                    <option value="ID2">ID2</option>
+                    <option value="ID3">ID3</option>
+                    <option value="ID4">ID4</option>
+                    <option value="ID5">ID5</option>
+                    <option value="ID6">ID6</option>
+                    <option value="ID7">ID7</option>
+                    <option value="ID8">ID8</option>
+                    <option value="ID9">ID9</option>
+                    <option value="ID10">ID10</option>
+                    <option value="test">test（デバッグ）</option>
+                </select>
+                <p id="clientDisplayNameHint" class="login-hint">表示名: ID1</p>
                 
                 <label for="serverHost">サーバーアドレス</label>
                 <input type="text" id="serverHost" placeholder="例: localhost" value="localhost">
@@ -27,6 +48,10 @@
                 <div id="loginStatus" class="status-message"></div>
             </div>
         </div>
+    </div>
+
+    <div id="electronConnecting" class="electron-connecting" hidden>
+        <p>接続中…</p>
     </div>
 
     <!-- 入力画面 -->
@@ -83,7 +108,7 @@
             <div class="right-panel">
                 <div class="score-display-card">
                     <h2>入力点数</h2>
-                    <div class="current-score" id="currentScore">0</div>
+                    <div class="current-score" id="currentScore" role="button" tabindex="0">0</div>
                     <p class="guide-text">数字を入力して「決定」を押してください</p>
                     <p class="warning-text" id="warningText">※ 10点までしか入力できません</p>
                 </div>
@@ -94,14 +119,22 @@
         </main>
     </div>
 
+    <div id="parentRemindOverlay" class="parent-remind-overlay" hidden role="alert" aria-live="assertive" aria-labelledby="parentRemindText">
+        <div class="parent-remind-panel">
+            <p id="parentRemindText" class="parent-remind-message">点数を入力してください！</p>
+        </div>
+    </div>
+
     <script>
         let socket;
         let clientName = '';
+        let clientDisplayName = '';
         let currentScore = 0;
         let isLocked = false;
         let unlockRequested = false;
         let currentRound = 1;
-        let teamNames = ['A', 'B', 'C', 'D', 'E', 'F']; // デフォルト
+        const TEAM_COUNT = 5;
+        let teamNames = ['A', 'B', 'C', 'D', 'E']; // デフォルト（5チーム）
         let roundHistory = {
             1: null, 2: null, 3: null, 4: null, 5: null
         }; // チーム別履歴(各チーム最新1件のみ)
@@ -110,6 +143,42 @@
 
         let clickCount = 0;
         let clickTimer = null;
+        let parentRemindTimer = null;
+        const pageParams = new URLSearchParams(window.location.search);
+
+        function migrateSavedClientId(saved) {
+            if (!saved) {
+                return 'ID1';
+            }
+            const idMatch = saved.match(/^ID(\d+)$/i);
+            if (idMatch) {
+                const n = Number(idMatch[1]);
+                if (n >= 1 && n <= 10) {
+                    return `ID${n}`;
+                }
+            }
+            const legacy = saved.match(/^子機(\d+)$/);
+            if (legacy) {
+                const n = Number(legacy[1]);
+                if (n >= 1 && n <= 10) {
+                    return `ID${n}`;
+                }
+            }
+            if (saved.toLowerCase() === 'test') {
+                return 'test';
+            }
+            return 'ID1';
+        }
+
+        function updateClientIdHint() {
+            const select = document.getElementById('clientId');
+            const hint = document.getElementById('clientDisplayNameHint');
+            if (!select || !hint) {
+                return;
+            }
+            const label = clientDisplayName || select.value;
+            hint.textContent = `表示名: ${label}`;
+        }
 
         // ページ読み込み時に保存された値を復元
         window.addEventListener('DOMContentLoaded', () => {
@@ -129,24 +198,40 @@
                 host = 'localhost';
             }
 
-            if (savedClientName) {
-                document.getElementById('clientName').value = savedClientName;
+            const clientIdEl = document.getElementById('clientId');
+            const paramClientId = params.get('clientId');
+            const skipLogin = params.get('electron') === '1' && params.get('skipLogin') === '1' && paramClientId;
+
+            const resolvedId = migrateSavedClientId(paramClientId || savedClientName);
+            if (clientIdEl) {
+                clientIdEl.value = resolvedId;
+                clientIdEl.addEventListener('change', updateClientIdHint);
             }
+            updateClientIdHint();
             document.getElementById('serverHost').value = host;
             localStorage.setItem('serverHost', host);
 
-            if (params.get('electron') === '1' && savedClientName) {
+            if (skipLogin) {
+                document.getElementById('loginScreen').style.display = 'none';
+                const connecting = document.getElementById('electronConnecting');
+                if (connecting) {
+                    connecting.hidden = false;
+                }
+                localStorage.setItem('clientName', resolvedId);
+                setTimeout(() => login(), 80);
+            } else if (params.get('electron') === '1' && savedClientName) {
                 setTimeout(() => login(), 300);
             }
         });
 
         function login() {
-            const name = document.getElementById('clientName').value.trim();
+            const idSelect = document.getElementById('clientId');
+            const name = (idSelect?.value || '').trim();
             const host = normalizeServerHost(document.getElementById('serverHost').value.trim());
             document.getElementById('serverHost').value = host;
             
             if (!name) {
-                showLoginStatus('子機名を入力してください', 'error');
+                showLoginStatus('子機IDを選択してください', 'error');
                 return;
             }
             if (!host) {
@@ -179,9 +264,13 @@
                 
                 setTimeout(() => {
                     document.getElementById('loginScreen').style.display = 'none';
+                    const connecting = document.getElementById('electronConnecting');
+                    if (connecting) {
+                        connecting.hidden = true;
+                    }
                     document.getElementById('inputScreen').style.display = 'block';
                     const nameDisplay = document.getElementById('clientNameDisplay');
-                    nameDisplay.textContent = name;
+                    nameDisplay.textContent = clientDisplayName || name;
                     
                     // testモードの場合は警告文を変更
                     if (testMode) {
@@ -190,12 +279,24 @@
                         warningText.style.color = '#e74c3c';
                     }
                     
-                    // 自動的にフルスクリーンモードに入る
-                    enterFullscreen();
-                    
-                    // 名前表示に3回クリックでフルスクリーン解除機能を追加
+                    // Electron 起動時はランチャー側でウィンドウ FS を設定。ブラウザ単体は従来どおり FS 可
+                    const electronFs = pageParams.get('startFullscreen') === '1';
+                    if (!window.kokiWindow && electronFs) {
+                        enterFullscreen();
+                    }
+
+                    // 左上表示名を3回クリックでフルスクリーン ON/OFF
                     nameDisplay.style.cursor = 'pointer';
+                    nameDisplay.title = '3回クリックでフルスクリーン切替';
                     nameDisplay.addEventListener('click', handleNameClick);
+
+                    const scoreEl = document.getElementById('currentScore');
+                    scoreEl.style.cursor = 'pointer';
+                    scoreEl.addEventListener('click', () => {
+                        if (!isLocked) {
+                            notifyEntering();
+                        }
+                    });
                     
                     // 初期表示として履歴を表示
                     updateHistoryDisplay();
@@ -203,9 +304,33 @@
             });
 
             socket.on('connect_error', () => {
+                const connecting = document.getElementById('electronConnecting');
+                if (connecting && !connecting.hidden) {
+                    connecting.innerHTML =
+                        '<p>接続に失敗しました。<br>ウィンドウを閉じて、ランチャーからやり直してください。</p>';
+                    return;
+                }
                 showLoginStatus('✗ 接続失敗: サーバーに接続できません', 'error');
             });
             
+            socket.on('client-display-names', (data) => {
+                if (data.myDisplayName) {
+                    clientDisplayName = data.myDisplayName;
+                } else if (Array.isArray(data.names)) {
+                    const sel = document.getElementById('clientId');
+                    const raw = data.myId || sel?.value;
+                    const n = Number(String(raw || '').replace(/^ID/i, ''));
+                    if (n >= 1 && n <= 10) {
+                        clientDisplayName = data.names[n - 1] || raw;
+                    }
+                }
+                const nameDisplay = document.getElementById('clientNameDisplay');
+                if (nameDisplay && clientDisplayName) {
+                    nameDisplay.textContent = clientDisplayName;
+                }
+                updateClientIdHint();
+            });
+
             // チーム名を受信
             socket.on('team-names', (data) => {
                 teamNames = data.teamNames;
@@ -250,7 +375,19 @@
             });
 
             socket.on('error', (data) => {
-                showError(data.message);
+                if (!data?.message) {
+                    return;
+                }
+                const onLogin = document.getElementById('loginScreen')?.style.display !== 'none';
+                if (onLogin) {
+                    showLoginStatus(data.message, 'error');
+                } else {
+                    showError(data.message);
+                }
+            });
+
+            socket.on('parent-remind', (data) => {
+                showParentRemind(data?.message);
             });
 
             // ラウンド変更を受信
@@ -286,8 +423,9 @@
             
             // 3回クリックでフルスクリーンのトグル（切り替え）
             if (clickCount === 3) {
-                // 現在フルスクリーンかどうかをチェック
-                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                if (window.kokiWindow?.toggleFullscreen) {
+                    window.kokiWindow.toggleFullscreen();
+                } else if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
                     exitFullscreen();
                 } else {
                     enterFullscreen();
@@ -322,6 +460,28 @@
             }
         }
 
+        function setEnteringBar() {
+            if (isLocked || unlockRequested) {
+                return;
+            }
+            const bar = document.getElementById('lockStatusBar');
+            const text = document.getElementById('lockStatusText');
+            bar.className = 'lock-status-bar entering';
+            text.textContent = '入力中';
+        }
+
+        function notifyEntering() {
+            if (!socket || isLocked || !clientName) {
+                return;
+            }
+            setEnteringBar();
+            socket.emit('score-entering', {
+                clientName,
+                active: true,
+                score: currentScore
+            });
+        }
+
         function addNumber(num) {
             if (isLocked) return;
 
@@ -347,6 +507,7 @@
             currentScore = newScore;
             updateScoreDisplay();
             updateButtonStates();
+            notifyEntering();
         }
 
         function clearScore() {
@@ -354,6 +515,7 @@
             currentScore = 0;
             updateScoreDisplay();
             updateButtonStates();
+            notifyEntering();
         }
 
         function setScoreTen() {
@@ -365,6 +527,7 @@
             }
             updateScoreDisplay();
             updateButtonStates();
+            notifyEntering();
         }
 
         function submitScore() {
@@ -474,10 +637,10 @@
             // 全チームの履歴を表示
             let html = '';
             
-            for (let r = 1; r <= 6; r++) {
+            for (let r = 1; r <= TEAM_COUNT; r++) {
                 const roundData = roundHistory[r];
                 const roundTotal = roundData ? roundData.score : 0;
-                const teamLabel = teamNames[r - 1];
+                const teamLabel = teamNames[r - 1] || `チーム${r}`;
                 
                 // チームごとのセクション（常に表示）
                 html += `
@@ -521,6 +684,37 @@
                 text.textContent = originalText;
             }, 3000);
         }
+
+        function dismissParentRemind() {
+            const overlay = document.getElementById('parentRemindOverlay');
+            if (!overlay || overlay.hidden) {
+                return;
+            }
+            overlay.hidden = true;
+            if (parentRemindTimer) {
+                clearTimeout(parentRemindTimer);
+                parentRemindTimer = null;
+            }
+            if (socket?.connected && clientName) {
+                socket.emit('remind-dismissed', { clientName });
+            }
+        }
+
+        function showParentRemind(message) {
+            const overlay = document.getElementById('parentRemindOverlay');
+            const textEl = document.getElementById('parentRemindText');
+            if (!overlay || !textEl) {
+                return;
+            }
+            textEl.textContent = message || '点数を入力してください！';
+            overlay.hidden = false;
+            if (parentRemindTimer) {
+                clearTimeout(parentRemindTimer);
+            }
+            parentRemindTimer = setTimeout(dismissParentRemind, 5000);
+        }
+
+        document.getElementById('parentRemindOverlay')?.addEventListener('click', dismissParentRemind);
     </script>
 </body>
 </html>

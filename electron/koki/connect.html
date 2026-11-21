@@ -9,28 +9,99 @@
         body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #eef2f7; padding: 20px; box-sizing: border-box; }
         .card { width: 100%; max-width: 420px; background: #fff; border-radius: 12px; padding: 24px; border: 1px solid #e1e4e8; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
         h1 { margin: 0 0 8px; font-size: 1.35rem; color: #2c3e50; }
-        p { margin: 0 0 20px; color: #6c757d; font-size: 0.9rem; line-height: 1.5; }
+        .lead { margin: 0 0 16px; color: #6c757d; font-size: 0.9rem; line-height: 1.5; }
         label { display: block; margin-bottom: 8px; font-weight: 500; color: #495057; }
-        input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 2px solid #dee2e6; border-radius: 8px; font-size: 1rem; margin-bottom: 12px; }
-        .btn-row { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+        input, select { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 2px solid #dee2e6; border-radius: 8px; font-size: 1rem; margin-bottom: 12px; }
+        .hint { font-size: 0.88rem; color: #6c757d; margin: -4px 0 14px; }
+        .server-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            margin-bottom: 14px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+        .server-status .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            background: #adb5bd;
+        }
+        .server-status.pending { background: #f8f9fa; color: #495057; }
+        .server-status.pending .dot { background: #ffc107; animation: pulse 1.2s ease-in-out infinite; }
+        .server-status.ok { background: #e8f5e9; border-color: #c3e6cb; color: #155724; }
+        .server-status.ok .dot { background: #28a745; }
+        .server-status.error { background: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+        .server-status.error .dot { background: #dc3545; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.45; }
+        }
+        .fs-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 4px 0 16px;
+            font-size: 0.95rem;
+            color: #495057;
+            cursor: pointer;
+            user-select: none;
+        }
+        .fs-option input {
+            width: auto;
+            margin: 0;
+            transform: scale(1.15);
+        }
+        .btn-row { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
         .version { margin-top: 16px; font-size: 0.78rem; color: #868e96; text-align: center; }
         .update-box { margin-top: 14px; padding-top: 14px; border-top: 1px solid #e9ecef; }
         .update-box p { margin: 0 0 8px; font-size: 0.82rem; color: #495057; min-height: 1.2em; }
         .update-progress { height: 6px; background: #e9ecef; border-radius: 999px; overflow: hidden; margin-top: 8px; }
         .update-progress-bar { height: 100%; width: 0%; background: #28a745; transition: width 0.15s ease; }
-        #status { min-height: 1.2em; font-size: 0.85rem; color: #dc3545; margin-bottom: 8px; }
+        #status { min-height: 1.2em; font-size: 0.85rem; color: #dc3545; margin-bottom: 8px; white-space: pre-line; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>子機接続</h1>
-        <p>親機PCの IP（例: <code>192.168.1.10</code>）または <code>localhost</code> を入力してください。<br>ランチャーに表示される URL をそのまま貼る場合も自動で判別します。</p>
+        <h1>子機ランチャー</h1>
+        <p class="lead">親機サーバーへの接続と、この端末の ID を選んで入力画面を開きます。</p>
         <div id="status"></div>
+
+        <div id="serverStatus" class="server-status pending" role="status">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="serverStatusText">サーバー接続を準備しています…</span>
+        </div>
+        <button type="button" class="btn btn-secondary btn-full" id="retryServerBtn" hidden>サーバー接続を再試行</button>
+
         <label for="host">親機サーバーアドレス</label>
         <input type="text" id="host" placeholder="localhost" autocomplete="off">
+
+        <label for="clientId">子機 ID</label>
+        <select id="clientId">
+            <option value="ID1">ID1</option>
+            <option value="ID2">ID2</option>
+            <option value="ID3">ID3</option>
+            <option value="ID4">ID4</option>
+            <option value="ID5">ID5</option>
+            <option value="ID6">ID6</option>
+            <option value="ID7">ID7</option>
+            <option value="ID8">ID8</option>
+            <option value="ID9">ID9</option>
+            <option value="ID10">ID10</option>
+        </select>
+        <p class="hint" id="displayHint">表示名: ID1</p>
+
+        <label class="fs-option">
+            <input type="checkbox" id="fullscreenCheck" checked>
+            <span>フルスクリーンで起動する（入力画面左上を3回クリックで切替）</span>
+        </label>
+
         <div class="btn-row">
-            <button type="button" class="btn btn-primary btn-full" id="connectBtn">接続して開始</button>
-            <button type="button" class="btn btn-warning btn-full" id="connectFsBtn">フルスクリーンで接続</button>
+            <button type="button" class="btn btn-primary btn-full" id="startBtn">子機起動</button>
         </div>
         <div class="version" id="versionLine">バージョン —</div>
         <div class="update-box">
@@ -43,36 +114,174 @@
         </div>
     </div>
     <script>
+        const STORAGE_FS = 'kokiLauncherFullscreen';
+        const AUTO_INTERVAL_MS = 5000;
+        const AUTO_MAX_ATTEMPTS = 30;
+
         const hostInput = document.getElementById('host');
+        const clientIdSelect = document.getElementById('clientId');
+        const displayHint = document.getElementById('displayHint');
         const statusEl = document.getElementById('status');
-        const connectBtn = document.getElementById('connectBtn');
-        const connectFsBtn = document.getElementById('connectFsBtn');
+        const startBtn = document.getElementById('startBtn');
+        const fullscreenCheck = document.getElementById('fullscreenCheck');
+        const serverStatusEl = document.getElementById('serverStatus');
+        const serverStatusText = document.getElementById('serverStatusText');
+        const retryServerBtn = document.getElementById('retryServerBtn');
+
+        let nameCache = null;
+        let serverReachable = false;
+        let autoConnectGeneration = 0;
+
+        function idIndex(id) {
+            const m = String(id).match(/^ID(\d+)$/i);
+            return m ? Number(m[1]) : 0;
+        }
+
+        function sleep(ms) {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+
+        function setServerStatus(kind, message) {
+            serverStatusEl.className = `server-status ${kind}`;
+            serverStatusText.textContent = message;
+        }
+
+        function updateDisplayHint() {
+            const id = clientIdSelect.value;
+            const idx = idIndex(id);
+            const label = nameCache && idx >= 1 && idx <= 10
+                ? (nameCache[idx - 1] || id)
+                : id;
+            displayHint.textContent = `表示名: ${label}`;
+        }
+
+        async function refreshNamesFromServer() {
+            if (!window.kokiAPI?.fetchClientNames || !serverReachable) {
+                updateDisplayHint();
+                return;
+            }
+            const result = await window.kokiAPI.fetchClientNames(hostInput.value);
+            if (result?.ok && Array.isArray(result.names)) {
+                nameCache = result.names;
+            } else {
+                nameCache = null;
+            }
+            updateDisplayHint();
+        }
+
+        async function tryPingOnce() {
+            if (!window.kokiAPI?.pingServer) {
+                return false;
+            }
+            const result = await window.kokiAPI.pingServer(hostInput.value);
+            if (result?.ok) {
+                serverReachable = true;
+                if (result.host) {
+                    hostInput.value = result.host;
+                }
+                setServerStatus('ok', `サーバーに接続済み（${hostInput.value}）`);
+                retryServerBtn.hidden = true;
+                await refreshNamesFromServer();
+                return true;
+            }
+            serverReachable = false;
+            nameCache = null;
+            updateDisplayHint();
+            return false;
+        }
+
+        async function runAutoConnect() {
+            const generation = ++autoConnectGeneration;
+            retryServerBtn.hidden = true;
+            retryServerBtn.disabled = true;
+
+            for (let attempt = 1; attempt <= AUTO_MAX_ATTEMPTS; attempt += 1) {
+                if (generation !== autoConnectGeneration) {
+                    return;
+                }
+                setServerStatus('pending', `サーバー接続を確認中… (${attempt}/${AUTO_MAX_ATTEMPTS})`);
+                if (await tryPingOnce()) {
+                    retryServerBtn.disabled = false;
+                    return;
+                }
+                if (attempt < AUTO_MAX_ATTEMPTS) {
+                    await sleep(AUTO_INTERVAL_MS);
+                }
+            }
+
+            if (generation !== autoConnectGeneration) {
+                return;
+            }
+            setServerStatus(
+                'error',
+                `サーバーに接続できませんでした（${AUTO_MAX_ATTEMPTS} 回試行）。親機で「サーバーを起動」しているか確認してください。`
+            );
+            retryServerBtn.hidden = false;
+            retryServerBtn.disabled = false;
+        }
 
         async function init() {
             try {
+                const savedFs = localStorage.getItem(STORAGE_FS);
+                if (savedFs === '0') {
+                    fullscreenCheck.checked = false;
+                } else if (savedFs === '1') {
+                    fullscreenCheck.checked = true;
+                }
                 hostInput.value = await window.kokiAPI.getDefaultHost();
+                if (window.kokiAPI.getDefaultClientId) {
+                    clientIdSelect.value = await window.kokiAPI.getDefaultClientId();
+                }
                 const info = await window.kokiAPI.getAppVersion();
                 document.getElementById('versionLine').textContent =
                     `集計システム 子機 v${info.version}`;
             } catch {
                 document.getElementById('versionLine').textContent = '集計システム 子機';
             }
+            updateDisplayHint();
+            await runAutoConnect();
         }
 
-        async function connect(fullscreen) {
+        fullscreenCheck.addEventListener('change', () => {
+            localStorage.setItem(STORAGE_FS, fullscreenCheck.checked ? '1' : '0');
+        });
+
+        let hostDebounce = null;
+        hostInput.addEventListener('input', () => {
+            serverReachable = false;
+            clearTimeout(hostDebounce);
+            hostDebounce = setTimeout(() => {
+                runAutoConnect();
+            }, 600);
+        });
+
+        clientIdSelect.addEventListener('change', updateDisplayHint);
+
+        retryServerBtn.addEventListener('click', () => {
+            runAutoConnect();
+        });
+
+        async function startChild() {
             statusEl.textContent = '';
-            connectBtn.disabled = true;
-            connectFsBtn.disabled = true;
-            const result = await window.kokiAPI.connect(hostInput.value, fullscreen);
-            connectBtn.disabled = false;
-            connectFsBtn.disabled = false;
+            startBtn.disabled = true;
+            retryServerBtn.disabled = true;
+            localStorage.setItem(STORAGE_FS, fullscreenCheck.checked ? '1' : '0');
+            const result = await window.kokiAPI.connect(
+                hostInput.value,
+                fullscreenCheck.checked,
+                clientIdSelect.value
+            );
+            startBtn.disabled = false;
+            retryServerBtn.disabled = false;
             if (!result.ok) {
                 statusEl.textContent = result.error || '接続に失敗しました。';
+                if (!serverReachable) {
+                    retryServerBtn.hidden = false;
+                }
             }
         }
 
-        connectBtn.addEventListener('click', () => connect(false));
-        connectFsBtn.addEventListener('click', () => connect(true));
+        startBtn.addEventListener('click', () => startChild());
 
         const updateStatusEl = document.getElementById('updateStatus');
         const installUpdateBtn = document.getElementById('installUpdateBtn');

@@ -18,23 +18,203 @@ try {
 }
 const GITHUB_RELEASES_URL = 'https://github.com/honi0907/syukei/releases/latest';
 
-// チーム名をファイルから読み込み
-let teamNames = ['A', 'B', 'C', 'D', 'E']; // デフォルト
-try {
-    const teamnameFile = path.join(__dirname, 'teamname.txt');
-    if (fs.existsSync(teamnameFile)) {
-        const content = fs.readFileSync(teamnameFile, 'utf8');
-        const lines = content.split('\n').map(line => line.trim()).filter(line => line);
-        if (lines.length >= 5) {
-            teamNames = lines.slice(0, 5);
-            console.log('チーム名を読み込みました:', teamNames);
-        }
-    }
-} catch (error) {
-    console.error('チーム名ファイル読み込みエラー:', error);
+const TEAM_COUNT = 5;
+const CLIENT_ID_COUNT = 10;
+
+const TEAM_NAME_PATH_FILE = path.join(__dirname, 'teamname-path.txt');
+const DEFAULT_TEAM_NAME_FILE = path.join(__dirname, 'teamname.txt');
+const TEAM_NAME_START_FILE = path.join(__dirname, 'teamname-startline.txt');
+
+const CLIENT_NAME_PATH_FILE = path.join(__dirname, 'clientname-path.txt');
+const DEFAULT_CLIENT_NAME_FILE = path.join(__dirname, 'clientname.txt');
+const CLIENT_NAME_START_FILE = path.join(__dirname, 'clientname-startline.txt');
+
+/** @type {string[]} */
+let teamNames = ['A', 'B', 'C', 'D', 'E'];
+/** @type {string} */
+let teamNameSourcePath = DEFAULT_TEAM_NAME_FILE;
+/** @type {number} */
+let teamNameStartLine = 1;
+
+/** @type {string[]} */
+let clientDisplayNames = Array.from({ length: CLIENT_ID_COUNT }, (_, i) => `ID${i + 1}`);
+/** @type {string} */
+let clientNameSourcePath = DEFAULT_CLIENT_NAME_FILE;
+/** @type {number} */
+let clientNameStartLine = 1;
+
+function defaultTeamNames() {
+    return ['A', 'B', 'C', 'D', 'E'];
 }
 
+function defaultClientDisplayNames() {
+    return Array.from({ length: CLIENT_ID_COUNT }, (_, i) => `ID${i + 1}`);
+}
+
+function readStartLine(filePath, fallback = 1) {
+    try {
+        if (fs.existsSync(filePath)) {
+            const n = Number.parseInt(fs.readFileSync(filePath, 'utf8').trim(), 10);
+            if (Number.isFinite(n) && n >= 1) {
+                return n;
+            }
+        }
+    } catch (error) {
+        console.error('開始行ファイル読み込みエラー:', filePath, error);
+    }
+    return fallback;
+}
+
+function saveStartLine(filePath, startLine) {
+    fs.writeFileSync(filePath, String(startLine), 'utf8');
+}
+
+/**
+ * @param {string[]} fileLines
+ * @param {number} startLine 1始まり
+ * @param {number} count
+ * @param {() => string[]} defaultFactory
+ */
+function extractNamesFromFileLines(fileLines, startLine, count, defaultFactory) {
+    const names = defaultFactory();
+    const startIdx = Math.max(0, startLine - 1);
+    for (let i = 0; i < count; i += 1) {
+        const line = (fileLines[startIdx + i] ?? '').trim();
+        if (line) {
+            names[i] = line;
+        }
+    }
+    return names;
+}
+
+function applyTeamNamesFromContent(content, startLine = teamNameStartLine) {
+    const safeStart = Math.max(1, Math.floor(startLine));
+    teamNameStartLine = safeStart;
+    saveStartLine(TEAM_NAME_START_FILE, safeStart);
+    teamNames = extractNamesFromFileLines(
+        content.split(/\r?\n/),
+        safeStart,
+        TEAM_COUNT,
+        defaultTeamNames
+    );
+}
+
+function loadTeamNamesFromDisk() {
+    teamNameStartLine = readStartLine(TEAM_NAME_START_FILE, 1);
+    try {
+        if (fs.existsSync(TEAM_NAME_PATH_FILE)) {
+            const savedPath = fs.readFileSync(TEAM_NAME_PATH_FILE, 'utf8').trim();
+            if (savedPath && fs.existsSync(savedPath)) {
+                teamNameSourcePath = savedPath;
+            }
+        }
+    } catch (error) {
+        console.error('チーム名パスファイル読み込みエラー:', error);
+    }
+
+    try {
+        if (fs.existsSync(teamNameSourcePath)) {
+            const content = fs.readFileSync(teamNameSourcePath, 'utf8');
+            applyTeamNamesFromContent(content, teamNameStartLine);
+            console.log('チーム名を読み込みました:', teamNameSourcePath, '開始行:', teamNameStartLine);
+        }
+    } catch (error) {
+        console.error('チーム名ファイル読み込みエラー:', error);
+    }
+}
+
+function saveTeamNameSourcePath(filePath) {
+    teamNameSourcePath = filePath;
+    fs.writeFileSync(TEAM_NAME_PATH_FILE, filePath, 'utf8');
+}
+
+function applyClientNamesFromContent(content, startLine = clientNameStartLine) {
+    const safeStart = Math.max(1, Math.floor(startLine));
+    clientNameStartLine = safeStart;
+    saveStartLine(CLIENT_NAME_START_FILE, safeStart);
+    clientDisplayNames = extractNamesFromFileLines(
+        content.split(/\r?\n/),
+        safeStart,
+        CLIENT_ID_COUNT,
+        defaultClientDisplayNames
+    );
+}
+
+function loadClientNamesFromDisk() {
+    clientNameStartLine = readStartLine(CLIENT_NAME_START_FILE, 1);
+    try {
+        if (fs.existsSync(CLIENT_NAME_PATH_FILE)) {
+            const savedPath = fs.readFileSync(CLIENT_NAME_PATH_FILE, 'utf8').trim();
+            if (savedPath && fs.existsSync(savedPath)) {
+                clientNameSourcePath = savedPath;
+            }
+        }
+    } catch (error) {
+        console.error('子機名パスファイル読み込みエラー:', error);
+    }
+
+    try {
+        if (fs.existsSync(clientNameSourcePath)) {
+            const content = fs.readFileSync(clientNameSourcePath, 'utf8');
+            applyClientNamesFromContent(content, clientNameStartLine);
+            console.log('子機表示名を読み込みました:', clientNameSourcePath, '開始行:', clientNameStartLine);
+        }
+    } catch (error) {
+        console.error('子機名ファイル読み込みエラー:', error);
+    }
+}
+
+function saveClientNameSourcePath(filePath) {
+    clientNameSourcePath = filePath;
+    fs.writeFileSync(CLIENT_NAME_PATH_FILE, filePath, 'utf8');
+}
+
+function broadcastTeamNames() {
+    io.emit('team-names', { teamNames });
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {number | null}
+ */
+function parseClientIdNumber(raw) {
+    const s = String(raw ?? '').trim();
+    const match = s.match(/^ID(\d+)$/i);
+    if (!match) {
+        return null;
+    }
+    const n = Number(match[1]);
+    if (n < 1 || n > CLIENT_ID_COUNT) {
+        return null;
+    }
+    return n;
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {string | null}
+ */
+function normalizeClientId(raw) {
+    const n = parseClientIdNumber(raw);
+    return n ? `ID${n}` : null;
+}
+
+/**
+ * @param {string} clientId
+ */
+function getClientDisplayName(clientId) {
+    const n = parseClientIdNumber(clientId);
+    if (n) {
+        return clientDisplayNames[n - 1] || clientId;
+    }
+    return clientId;
+}
+
+loadTeamNamesFromDisk();
+loadClientNamesFromDisk();
+
 // 静的ファイル配信
+app.use(express.json({ limit: '256kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // データ管理
@@ -50,12 +230,218 @@ let currentRound = 1;
 const history = [];
 let connectedClients = new Set();
 
+/**
+ * 親機向けの子機一覧（得点・ロック・入力中）
+ * @param {number | string} [round]
+ */
+function scoreForClientRound(name, round) {
+    if (round === 'total') {
+        let total = 0;
+        for (let r = 1; r <= 5; r += 1) {
+            total += roundScores[r]?.[name]?.score || 0;
+        }
+        return total;
+    }
+    return roundScores[round]?.[name]?.score || 0;
+}
+
+/**
+ * 確定得点＋入力中の仮点数（未ロック時のみ）
+ * @param {string} name
+ * @param {number | string} round
+ */
+function displayScoreForClient(name, round) {
+    const row = scores[name];
+    const committed = scoreForClientRound(name, round);
+    if (!row || row.locked || !row.entering) {
+        return committed;
+    }
+    const draft = row.draftScore;
+    if (typeof draft !== 'number' || draft < 0) {
+        return committed;
+    }
+    if (round === 'total') {
+        const currentCommitted = roundScores[currentRound]?.[name]?.score || 0;
+        return committed - currentCommitted + draft;
+    }
+    if (round === currentRound) {
+        return draft;
+    }
+    return committed;
+}
+
+function buildClientRow(name, round) {
+    const row = scores[name];
+    const roundScore = displayScoreForClient(name, round);
+    const entering = Boolean(row.entering) && !row.locked;
+    return {
+        name,
+        displayName: getClientDisplayName(name),
+        connected: true,
+        score: roundScore,
+        committedScore: scoreForClientRound(name, round),
+        draftScore: entering && typeof row.draftScore === 'number' ? row.draftScore : null,
+        locked: row.locked,
+        entering,
+        unlockRequested: row.unlockRequested || false,
+        lastUpdate: row.lastUpdate,
+        isTest: Boolean(row.isTest)
+    };
+}
+
+function buildClientList(round = currentRound) {
+    const list = [];
+    for (let n = 1; n <= CLIENT_ID_COUNT; n += 1) {
+        const name = `ID${n}`;
+        if (scores[name]) {
+            list.push(buildClientRow(name, round));
+        }
+    }
+
+    Object.keys(scores).forEach((name) => {
+        if (parseClientIdNumber(name)) {
+            return;
+        }
+        list.push(buildClientRow(name, round));
+    });
+
+    return list;
+}
+
+function buildRankingClientList(round = currentRound) {
+    return buildClientList(round)
+        .filter((c) => c.connected && !c.isTest)
+        .map((c) => ({
+            name: c.displayName,
+            score: c.score
+        }))
+        .sort((a, b) => b.score - a.score);
+}
+
+function disconnectDuplicateClientSockets(clientId, keepSocketId) {
+    io.sockets.sockets.forEach((s) => {
+        if (s.clientName === clientId && s.id !== keepSocketId) {
+            s.disconnect(true);
+        }
+    });
+}
+
 app.get('/api/version', (_req, res) => {
     res.json({
         name: pkg.name,
         version: pkg.version,
         releasesUrl: GITHUB_RELEASES_URL
     });
+});
+
+app.get('/api/client-names', (_req, res) => {
+    res.json({
+        names: clientDisplayNames,
+        path: clientNameSourcePath,
+        startLine: clientNameStartLine
+    });
+});
+
+app.get('/api/team-names', (_req, res) => {
+    res.json({
+        names: teamNames,
+        path: teamNameSourcePath,
+        startLine: teamNameStartLine
+    });
+});
+
+app.post('/api/client-names/load', (req, res) => {
+    try {
+        const { path: filePath, content, startLine } = req.body || {};
+        const requestedStart = startLine !== undefined
+            ? Math.max(1, Math.floor(Number(startLine)))
+            : clientNameStartLine;
+
+        if (typeof content === 'string') {
+            applyClientNamesFromContent(content, requestedStart);
+            if (!filePath) {
+                fs.writeFileSync(DEFAULT_CLIENT_NAME_FILE, content, 'utf8');
+                clientNameSourcePath = DEFAULT_CLIENT_NAME_FILE;
+            }
+        } else if (filePath) {
+            if (!fs.existsSync(filePath)) {
+                res.status(400).json({ ok: false, error: 'ファイルが見つかりません' });
+                return;
+            }
+            saveClientNameSourcePath(filePath);
+            const fileContent = fs.readFileSync(filePath, 'utf8');
+            applyClientNamesFromContent(fileContent, requestedStart);
+        } else {
+            if (startLine !== undefined) {
+                clientNameStartLine = requestedStart;
+                saveStartLine(CLIENT_NAME_START_FILE, requestedStart);
+            }
+            loadClientNamesFromDisk();
+        }
+
+        io.emit('client-display-names', {
+            names: clientDisplayNames,
+            path: clientNameSourcePath,
+            startLine: clientNameStartLine
+        });
+        io.emit('score-updated', {
+            clients: buildClientList(),
+            history: history.slice(-10)
+        });
+
+        res.json({
+            ok: true,
+            names: clientDisplayNames,
+            path: clientNameSourcePath,
+            startLine: clientNameStartLine
+        });
+    } catch (error) {
+        console.error('子機名読込エラー:', error);
+        res.status(500).json({ ok: false, error: String(error.message) });
+    }
+});
+
+app.post('/api/team-names/load', (req, res) => {
+    try {
+        const { path: filePath, content, startLine } = req.body || {};
+        const requestedStart = startLine !== undefined
+            ? Math.max(1, Math.floor(Number(startLine)))
+            : teamNameStartLine;
+
+        if (typeof content === 'string') {
+            applyTeamNamesFromContent(content, requestedStart);
+            if (!filePath) {
+                fs.writeFileSync(DEFAULT_TEAM_NAME_FILE, content, 'utf8');
+                teamNameSourcePath = DEFAULT_TEAM_NAME_FILE;
+            }
+        } else if (filePath) {
+            if (!fs.existsSync(filePath)) {
+                res.status(400).json({ ok: false, error: 'ファイルが見つかりません' });
+                return;
+            }
+            saveTeamNameSourcePath(filePath);
+            const fileContent = fs.readFileSync(filePath, 'utf8');
+            applyTeamNamesFromContent(fileContent, requestedStart);
+        } else {
+            if (startLine !== undefined) {
+                teamNameStartLine = requestedStart;
+                saveStartLine(TEAM_NAME_START_FILE, requestedStart);
+            }
+            loadTeamNamesFromDisk();
+        }
+
+        broadcastTeamNames();
+
+        res.json({
+            ok: true,
+            names: teamNames,
+            path: teamNameSourcePath,
+            startLine: teamNameStartLine
+        });
+    } catch (error) {
+        console.error('チーム名読込エラー:', error);
+        res.status(500).json({ ok: false, error: String(error.message) });
+    }
 });
 
 // ルート
@@ -86,7 +472,16 @@ io.on('connection', (socket) => {
     
     // 子機からの登録
     socket.on('register', (data) => {
-        const { clientName } = data;
+        const rawName = String(data?.clientName ?? '').trim();
+        const isTestClient = rawName.toLowerCase() === 'test';
+        const clientName = isTestClient ? rawName : normalizeClientId(rawName);
+
+        if (!clientName) {
+            socket.emit('error', { message: 'ID1〜ID10 から選択してください' });
+            return;
+        }
+
+        disconnectDuplicateClientSockets(clientName, socket.id);
         socket.clientName = clientName;
         connectedClients.add(socket.id);
         
@@ -95,24 +490,22 @@ io.on('connection', (socket) => {
             scores[clientName] = {
                 name: clientName,
                 locked: false,
+                entering: false,
+                draftScore: null,
                 unlockRequested: false,
                 lastUpdate: new Date().toISOString()
             };
         }
+        if (scores[clientName].entering === undefined) {
+            scores[clientName].entering = false;
+        }
+        if (scores[clientName].draftScore === undefined) {
+            scores[clientName].draftScore = null;
+        }
         
         console.log(`子機登録: ${clientName}`);
         
-        // 親機に接続状態を通知（現在のラウンドのスコアを送信）
-        const clientList = Object.keys(scores).map(name => {
-            const roundScore = roundScores[currentRound]?.[name]?.score || 0;
-            return {
-                name,
-                score: roundScore,
-                locked: scores[name].locked,
-                unlockRequested: scores[name].unlockRequested || false,
-                lastUpdate: scores[name].lastUpdate
-            };
-        });
+        const clientList = buildClientList();
         
         io.emit('client-connected', {
             clientName,
@@ -121,6 +514,36 @@ io.on('connection', (socket) => {
         
         // 子機にロック状態を送信
         socket.emit('lock-status', { locked: scores[clientName].locked });
+        socket.emit('client-display-names', {
+            names: clientDisplayNames,
+            path: clientNameSourcePath,
+            myId: clientName,
+            myDisplayName: getClientDisplayName(clientName)
+        });
+    });
+
+    // 子機: テンキー操作中（決定前）
+    socket.on('score-entering', (data) => {
+        const clientName = data?.clientName || socket.clientName;
+        if (!clientName || !scores[clientName]) {
+            return;
+        }
+        if (scores[clientName].locked) {
+            return;
+        }
+        const active = data?.active !== false;
+        scores[clientName].entering = active;
+        if (active && typeof data?.score === 'number' && data.score >= 0) {
+            scores[clientName].draftScore = data.score;
+        } else if (!active) {
+            scores[clientName].draftScore = null;
+        }
+        scores[clientName].lastUpdate = new Date().toISOString();
+
+        io.emit('score-updated', {
+            clients: buildClientList(),
+            history: history.slice(-10)
+        });
     });
     
     // 点数送信
@@ -151,6 +574,8 @@ io.on('connection', (socket) => {
         // メタデータのみ更新（総合スコアは計算時に算出）
         scores[clientName].lastUpdate = new Date().toISOString();
         scores[clientName].locked = true; // 送信後自動ロック
+        scores[clientName].entering = false;
+        scores[clientName].draftScore = null;
         
         // 現在のラウンドの合計を計算
         const currentRoundTotal = roundScores[currentRound][clientName].score;
@@ -165,43 +590,13 @@ io.on('connection', (socket) => {
         
         console.log(`スコア受信: ${clientName} - ${score}点 (チーム${teamNames[currentRound - 1]}合計: ${currentRoundTotal})`);
         
-        // 全員に更新を通知（現在のラウンドのスコアを送信）
-        const clientList = Object.keys(scores).map(name => {
-            const roundScore = roundScores[currentRound][name]?.score || 0;
-            return {
-                name,
-                score: roundScore,
-                locked: scores[name].locked,
-                unlockRequested: scores[name].unlockRequested || false,
-                lastUpdate: scores[name].lastUpdate
-            };
-        });
-        
         io.emit('score-updated', {
-            clients: clientList,
+            clients: buildClientList(),
             history: history.slice(-10)
         });
         
         // ランキングウィンドウ用にも現在のラウンドデータを送信
-        const rankingClientList = Object.keys(scores).map(name => {
-            let roundScore = 0;
-            if (currentRound === 'total') {
-                for (let r = 1; r <= 5; r++) {
-                    if (roundScores[r] && roundScores[r][name]) {
-                        roundScore += roundScores[r][name].score || 0;
-                    }
-                }
-            } else {
-                if (roundScores[currentRound] && roundScores[currentRound][name]) {
-                    roundScore = roundScores[currentRound][name].score || 0;
-                }
-            }
-            return {
-                name,
-                score: roundScore
-            };
-        }).sort((a, b) => b.score - a.score);
-        
+        const rankingClientList = buildRankingClientList(currentRound);
         const rankingTotal = rankingClientList.reduce((sum, client) => sum + (client.score || 0), 0);
         io.emit('ranking-data', { total: rankingTotal, clients: rankingClientList, round: currentRound });
         
@@ -234,27 +629,17 @@ io.on('connection', (socket) => {
     socket.on('unlock-all', () => {
         Object.keys(scores).forEach(name => {
             scores[name].locked = false;
+            scores[name].entering = false;
+            scores[name].draftScore = null;
             scores[name].unlockRequested = false;
         });
         
         console.log('全子機ロック解除');
         
-        // 全子機にロック解除を通知
         io.emit('lock-status', { locked: false });
         
-        // 親機に更新を通知(現在のラウンドのスコアを含める)
         io.emit('score-updated', {
-            clients: Object.keys(scores).map(name => {
-                const roundScore = currentRound === 'total' 
-                    ? Object.keys(roundScores).reduce((sum, r) => sum + (roundScores[r][name]?.score || 0), 0)
-                    : (roundScores[currentRound][name]?.score || 0);
-                return {
-                    name,
-                    score: roundScore,
-                    unlockRequested: false,
-                    ...scores[name]
-                };
-            }),
+            clients: buildClientList(),
             history: history.slice(-10)
         });
     });
@@ -266,30 +651,46 @@ io.on('connection', (socket) => {
             scores[clientName].unlockRequested = true;
             console.log(`解除申請: ${clientName}`);
             
-            // 親機に更新を通知
-            const clientList = Object.keys(scores).map(name => {
-                const roundScore = roundScores[currentRound][name]?.score || 0;
-                return {
-                    name,
-                    score: roundScore,
-                    locked: scores[name].locked,
-                    unlockRequested: scores[name].unlockRequested || false,
-                    lastUpdate: scores[name].lastUpdate
-                };
-            });
-            
             io.emit('score-updated', {
-                clients: clientList,
+                clients: buildClientList(),
                 history: history.slice(-10)
             });
         }
     });
     
+    // 親機からの催促（該当子機の画面に警告表示）
+    socket.on('remind-client', (data) => {
+        const clientName = normalizeClientId(String(data?.clientName ?? '').trim());
+        const rawMessage = String(data?.message ?? '点数を入力してください！').trim();
+        const message = rawMessage || '点数を入力してください！';
+        if (!clientName || !scores[clientName]) {
+            return;
+        }
+        io.sockets.sockets.forEach((s) => {
+            if (s.clientName === clientName) {
+                s.emit('parent-remind', { message });
+            }
+        });
+        io.emit('remind-started', { clientName, durationMs: 5000 });
+        console.log(`催促: ${clientName}`);
+    });
+
+    socket.on('remind-dismissed', (data) => {
+        const raw = data?.clientName || socket.clientName;
+        const clientName = normalizeClientId(String(raw ?? '').trim());
+        if (!clientName) {
+            return;
+        }
+        io.emit('remind-ended', { clientName });
+    });
+
     // 親機からの個別ロック解除
     socket.on('unlock-client', (data) => {
         const { clientName } = data;
         if (scores[clientName]) {
             scores[clientName].locked = false;
+            scores[clientName].entering = false;
+            scores[clientName].draftScore = null;
             scores[clientName].unlockRequested = false;
             
             console.log(`個別ロック解除: ${clientName}`);
@@ -301,20 +702,8 @@ io.on('connection', (socket) => {
                 }
             });
             
-            // 親機に更新を通知
-            const clientList = Object.keys(scores).map(name => {
-                const roundScore = roundScores[currentRound][name]?.score || 0;
-                return {
-                    name,
-                    score: roundScore,
-                    locked: scores[name].locked,
-                    unlockRequested: scores[name].unlockRequested || false,
-                    lastUpdate: scores[name].lastUpdate
-                };
-            });
-            
             io.emit('score-updated', {
-                clients: clientList,
+                clients: buildClientList(),
                 history: history.slice(-10)
             });
         }
@@ -324,25 +713,16 @@ io.on('connection', (socket) => {
     socket.on('lock-all', () => {
         Object.keys(scores).forEach(name => {
             scores[name].locked = true;
+            scores[name].entering = false;
+            scores[name].draftScore = null;
         });
         
         console.log('全子機ロック');
         
-        // 全子機にロックを通知
         io.emit('lock-status', { locked: true });
         
-        // 親機に更新を通知(現在のラウンドのスコアを含める)
         io.emit('score-updated', {
-            clients: Object.keys(scores).map(name => {
-                const roundScore = currentRound === 'total' 
-                    ? Object.keys(roundScores).reduce((sum, r) => sum + (roundScores[r][name]?.score || 0), 0)
-                    : (roundScores[currentRound][name]?.score || 0);
-                return {
-                    name,
-                    score: roundScore,
-                    ...scores[name]
-                };
-            }),
+            clients: buildClientList(),
             history: history.slice(-10)
         });
     });
@@ -361,26 +741,16 @@ io.on('connection', (socket) => {
             });
         }
         
-        // ロック解除
         Object.keys(scores).forEach(name => {
             scores[name].locked = false;
+            scores[name].entering = false;
+            scores[name].draftScore = null;
         });
         
         console.log(`チーム${teamNames[round - 1]}をリセット`);
         
-        // 現在のラウンドデータを再送信
-        const clientList = Object.keys(scores).map(name => {
-            const roundScore = roundScores[round][name]?.score || 0;
-            return {
-                name,
-                score: roundScore,
-                locked: scores[name].locked,
-                lastUpdate: scores[name].lastUpdate
-            };
-        });
-        
         io.emit('score-updated', {
-            clients: clientList,
+            clients: buildClientList(round),
             history: []
         });
         
@@ -398,9 +768,10 @@ io.on('connection', (socket) => {
             }
         }
         
-        // メタデータをリセット
         Object.keys(scores).forEach(name => {
             scores[name].locked = false;
+            scores[name].entering = false;
+            scores[name].draftScore = null;
         });
         
         history.length = 0;
@@ -409,12 +780,7 @@ io.on('connection', (socket) => {
         
         // 現在のラウンドデータを再送信
         io.emit('round-data', {
-            clients: Object.keys(scores).map(name => ({
-                name,
-                score: 0,
-                locked: false,
-                lastUpdate: scores[name].lastUpdate
-            })),
+            clients: buildClientList(),
             history: []
         });
         
@@ -437,34 +803,8 @@ io.on('connection', (socket) => {
     
     // 得点発表要求
     socket.on('show-ranking', () => {
-        // 現在のラウンドの得点を計算（scoresに存在する子機のみ）
-        const clientList = Object.keys(scores)
-            .filter(name => !scores[name].isTest) // テストデータを除外
-            .map(name => {
-                let roundScore = 0;
-                if (currentRound === 'total') {
-                    // 総合表示の場合は全ラウンドの合計
-                    for (let r = 1; r <= 5; r++) {
-                        if (roundScores[r] && roundScores[r][name]) {
-                            roundScore += roundScores[r][name].score || 0;
-                        }
-                    }
-                } else {
-                    // 個別ラウンドの場合は現在のラウンドのみ
-                    if (roundScores[currentRound] && roundScores[currentRound][name]) {
-                        roundScore = roundScores[currentRound][name].score || 0;
-                    }
-                }
-                return {
-                    name,
-                    score: roundScore
-                };
-            })
-            .sort((a, b) => b.score - a.score);
-        
-        // 全体の総合得点
+        const clientList = buildRankingClientList(currentRound);
         const total = clientList.reduce((sum, client) => sum + (client.score || 0), 0);
-        
         const roundLabel = currentRound === 'total' ? '総合' : `第${currentRound}ラウンド`;
         console.log(`得点発表データ送信: ${roundLabel} 合計 ${total}点`);
         io.emit('ranking-data', { total, clients: clientList, round: currentRound });
@@ -474,32 +814,7 @@ io.on('connection', (socket) => {
     socket.on('trigger-go', () => {
         console.log('得点GO! トリガー受信');
         
-        // 最新のランキングデータを送信してからアニメーション開始
-        const clientList = Object.keys(scores)
-            .filter(name => !scores[name].isTest) // テストデータを除外
-            .map(name => {
-                let roundScore = 0;
-                if (currentRound === 'total') {
-                    // 総合表示の場合は全ラウンドの合計
-                    for (let r = 1; r <= 5; r++) {
-                        if (roundScores[r] && roundScores[r][name]) {
-                            roundScore += roundScores[r][name].score || 0;
-                        }
-                    }
-                } else {
-                    // 個別ラウンドの場合は現在のラウンドのみ
-                    if (roundScores[currentRound] && roundScores[currentRound][name]) {
-                        roundScore = roundScores[currentRound][name].score || 0;
-                    }
-                }
-                return {
-                    name,
-                    score: roundScore
-                };
-            })
-            .sort((a, b) => b.score - a.score);
-        
-        // 全体の総合得点
+        const clientList = buildRankingClientList(currentRound);
         const total = clientList.reduce((sum, client) => sum + (client.score || 0), 0);
         
         console.log(`得点GO! 最新データ送信: 合計 ${total}点`);
@@ -520,34 +835,8 @@ io.on('connection', (socket) => {
     // ランキングページからのデータリクエスト
     // ランキングページからのデータリクエスト
     socket.on('request-ranking-data', () => {
-        // 現在のラウンドの得点を計算（scoresに存在する子機のみ）
-        const clientList = Object.keys(scores)
-            .filter(name => !scores[name].isTest) // テストデータを除外
-            .map(name => {
-                let roundScore = 0;
-                if (currentRound === 'total') {
-                    // 総合表示の場合は全ラウンドの合計
-                    for (let r = 1; r <= 5; r++) {
-                        if (roundScores[r] && roundScores[r][name]) {
-                            roundScore += roundScores[r][name].score || 0;
-                        }
-                    }
-                } else {
-                    // 個別ラウンドの場合は現在のラウンドのみ
-                    if (roundScores[currentRound] && roundScores[currentRound][name]) {
-                        roundScore = roundScores[currentRound][name].score || 0;
-                    }
-                }
-                return {
-                    name,
-                    score: roundScore
-                };
-            })
-            .sort((a, b) => b.score - a.score);
-        
-        // 全体の総合得点
+        const clientList = buildRankingClientList(currentRound);
         const total = clientList.reduce((sum, client) => sum + (client.score || 0), 0);
-        
         const roundLabel = currentRound === 'total' ? '総合' : `第${currentRound}ラウンド`;
         console.log(`ランキングデータ送信: ${roundLabel} 合計 ${total}点`);
         socket.emit('ranking-data', { total, clients: clientList, round: currentRound });
@@ -612,38 +901,10 @@ io.on('connection', (socket) => {
     
     // ラウンド別データリクエスト
     socket.on('request-round-data', (round) => {
-        let clientList;
-        
-        if (round === 'total') {
-            // 総合得点（全ラウンドの合計）
-            const totalScores = {};
-            Object.keys(scores).forEach(name => {
-                totalScores[name] = { name, score: 0, locked: scores[name].locked };
-                for (let r = 1; r <= 5; r++) {
-                    if (roundScores[r][name]) {
-                        totalScores[name].score += roundScores[r][name].score;
-                    }
-                }
-            });
-            clientList = Object.values(totalScores);
-        } else {
-            // 特定ラウンドのスコア
-            if (!roundScores[round]) {
-                roundScores[round] = {};
-            }
-            
-            // 登録済みの全クライアントに対してラウンド別スコアを返す
-            clientList = Object.keys(scores).map(name => {
-                const roundScore = roundScores[round][name]?.score || 0;
-                return {
-                    name,
-                    score: roundScore, // このラウンドのスコアのみ
-                    locked: scores[name].locked,
-                    lastUpdate: scores[name].lastUpdate
-                };
-            });
+        if (round !== 'total' && !roundScores[round]) {
+            roundScores[round] = {};
         }
-        
+        const clientList = buildClientList(round === 'total' ? 'total' : round);
         socket.emit('round-data', { round, clients: clientList });
     });
     
@@ -655,6 +916,13 @@ io.on('connection', (socket) => {
     // チーム名をリクエスト
     socket.on('request-team-names', () => {
         socket.emit('team-names', { teamNames });
+    });
+
+    socket.on('request-client-display-names', () => {
+        socket.emit('client-display-names', {
+            names: clientDisplayNames,
+            path: clientNameSourcePath
+        });
     });
     
     // 全ラウンドの合計をリクエスト（各クライアントの総合得点）
@@ -698,17 +966,8 @@ io.on('connection', (socket) => {
     
     // 子機情報をリクエスト
     socket.on('request-clients', () => {
-        const clientList = Object.keys(scores).map(name => {
-            const roundScore = roundScores[currentRound]?.[name]?.score || 0;
-            return {
-                name,
-                score: roundScore,
-                locked: scores[name].locked,
-                unlockRequested: scores[name].unlockRequested || false,
-                lastUpdate: scores[name].lastUpdate
-            };
-        });
-        
+        const clientList = buildClientList();
+
         console.log('子機情報を送信:', clientList);
         socket.emit('clients-data', { clients: clientList });
     });
@@ -767,22 +1026,8 @@ io.on('connection', (socket) => {
             }
         }
         
-        // 親機に更新を通知
-        const clientList = Object.keys(scores)
-            .filter(name => !scores[name].isTest)
-            .map(name => {
-                const roundScore = roundScores[currentRound][name]?.score || 0;
-                return {
-                    name,
-                    score: roundScore,
-                    locked: scores[name].locked,
-                    unlockRequested: scores[name].unlockRequested || false,
-                    lastUpdate: scores[name].lastUpdate
-                };
-            });
-        
         io.emit('score-updated', {
-            clients: clientList,
+            clients: buildClientList(),
             history: history.slice(-10)
         });
         
@@ -834,22 +1079,8 @@ io.on('connection', (socket) => {
         scores[testClientName].lastUpdate = new Date().toISOString();
         scores[testClientName].isTest = testMode;
         
-        // 親機に更新を通知（テストデータは除外）
-        const clientList = Object.keys(scores)
-            .filter(name => !scores[name].isTest) // テストモードのデータは除外
-            .map(name => {
-                const roundScore = roundScores[round][name]?.score || 0;
-                return {
-                    name,
-                    score: roundScore,
-                    locked: scores[name].locked,
-                    unlockRequested: scores[name].unlockRequested || false,
-                    lastUpdate: scores[name].lastUpdate
-                };
-            });
-        
         io.emit('score-updated', {
-            clients: clientList,
+            clients: buildClientList(round),
             history: history.slice(-10)
         });
         
@@ -868,20 +1099,9 @@ io.on('connection', (socket) => {
         io.emit('team-totals', teamTotals);
         
         // ランキングデータも更新（テストモードOFFの場合のみランキング表示用データを送る）
-        const rankingClientList = testMode 
-            ? Object.keys(scores)
-                .filter(name => name === '__TEST__')
-                .map(name => {
-                    const roundScore = roundScores[round][name]?.score || 0;
-                    return { name: teamNames[0], score: roundScore }; // ランキング表示は元のチーム名で
-                })
-            : Object.keys(scores).map(name => {
-            const roundScore = roundScores[round][name]?.score || 0;
-            return {
-                name,
-                score: roundScore
-            };
-        }).sort((a, b) => b.score - a.score);
+        const rankingClientList = testMode
+            ? [{ name: teamNames[0], score: roundScores[round]?.['__TEST__']?.score || 0 }]
+            : buildRankingClientList(round);
         
         const rankingTotal = rankingClientList.reduce((sum, client) => sum + (client.score || 0), 0);
         io.emit('ranking-data', { total: rankingTotal, clients: rankingClientList, round: round });
@@ -971,17 +1191,8 @@ io.on('connection', (socket) => {
         }
         
         // 現在のラウンドのスコアを送信（削除後の状態）
-        const clientList = Object.keys(scores).map(name => {
-            const roundScore = roundScores[currentRound]?.[name]?.score || 0;
-            return {
-                name,
-                score: roundScore,
-                locked: scores[name].locked,
-                unlockRequested: scores[name].unlockRequested || false,
-                lastUpdate: scores[name].lastUpdate
-            };
-        });
-        
+        const clientList = buildClientList();
+
         io.emit('client-disconnected', {
             clientName: disconnectedClient,
             clients: clientList
