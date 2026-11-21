@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const { registerAppUpdateIpc } = require('./app-updater');
 const { getBrowserWindowIcon } = require('./app-icon');
 const { repairDesktopShortcutIfPresent } = require('./repair-desktop-shortcut');
+const { placeScoreWindowOnOutput, getScoreWindowCreateOptions } = require('./score-display');
 const path = require('path');
 const http = require('http');
 const net = require('net');
@@ -421,17 +422,20 @@ function openAppWindow(kind, options = {}) {
     }
 
     if (config.existing && !config.existing.isDestroyed()) {
+        if (kind === 'score') {
+            placeScoreWindowOnOutput(config.existing, {
+                fullscreen: config.fullscreen,
+                width: config.width,
+                height: config.height,
+                app
+            });
+        }
         config.existing.show();
         config.existing.focus();
-        if (kind === 'score') {
-            config.existing.setFullScreen(config.fullscreen);
-        }
         return;
     }
 
-    const win = new BrowserWindow({
-        width: config.width,
-        height: config.height,
+    const winOptions = {
         show: false,
         title: config.title,
         autoHideMenuBar: true,
@@ -441,14 +445,38 @@ function openAppWindow(kind, options = {}) {
             contextIsolation: true,
             nodeIntegration: false
         }
-    });
+    };
+
+    if (kind === 'score') {
+        Object.assign(
+            winOptions,
+            getScoreWindowCreateOptions(app, {
+                width: config.width,
+                height: config.height,
+                fullscreen: config.fullscreen
+            })
+        );
+    } else {
+        winOptions.width = config.width;
+        winOptions.height = config.height;
+    }
+
+    const win = new BrowserWindow(winOptions);
 
     win.loadURL(config.url);
     win.once('ready-to-show', () => {
-        if (kind === 'score' && config.fullscreen) {
-            win.setFullScreen(true);
+        if (kind === 'score') {
+            placeScoreWindowOnOutput(win, {
+                fullscreen: config.fullscreen,
+                width: config.width,
+                height: config.height,
+                app
+            });
         }
         win.show();
+        if (kind === 'score') {
+            win.focus();
+        }
     });
     win.on('closed', () => {
         clearWindowRef(kind);
