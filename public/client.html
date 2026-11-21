@@ -64,18 +64,18 @@
 
                 <!-- ボタングリッド -->
                 <div class="numpad" id="numpad">
-                    <button class="num-btn" data-number="7" onclick="addNumber(7)">7</button>
-                    <button class="num-btn" data-number="8" onclick="addNumber(8)">8</button>
-                    <button class="num-btn" data-number="9" onclick="addNumber(9)">9</button>
-                    <button class="num-btn" data-number="4" onclick="addNumber(4)">4</button>
-                    <button class="num-btn" data-number="5" onclick="addNumber(5)">5</button>
-                    <button class="num-btn" data-number="6" onclick="addNumber(6)">6</button>
-                    <button class="num-btn" data-number="1" onclick="addNumber(1)">1</button>
-                    <button class="num-btn" data-number="2" onclick="addNumber(2)">2</button>
-                    <button class="num-btn" data-number="3" onclick="addNumber(3)">3</button>
-                    <button class="num-btn clear" onclick="clearScore()">クリア</button>
-                    <button class="num-btn" data-number="0" onclick="addNumber(0)">0</button>
-                    <button class="num-btn submit" onclick="submitScore()">決定</button>
+                    <button type="button" class="num-btn" data-number="1" onclick="addNumber(1)">1</button>
+                    <button type="button" class="num-btn" data-number="2" onclick="addNumber(2)">2</button>
+                    <button type="button" class="num-btn" data-number="3" onclick="addNumber(3)">3</button>
+                    <button type="button" class="num-btn" data-number="4" onclick="addNumber(4)">4</button>
+                    <button type="button" class="num-btn" data-number="5" onclick="addNumber(5)">5</button>
+                    <button type="button" class="num-btn" data-number="6" onclick="addNumber(6)">6</button>
+                    <button type="button" class="num-btn" data-number="7" onclick="addNumber(7)">7</button>
+                    <button type="button" class="num-btn" data-number="8" onclick="addNumber(8)">8</button>
+                    <button type="button" class="num-btn" data-number="9" onclick="addNumber(9)">9</button>
+                    <button type="button" class="num-btn clear" onclick="clearScore()">クリア</button>
+                    <button type="button" class="num-btn num-btn-ten" id="tenBtn" onclick="setScoreTen()">10</button>
+                    <button type="button" class="num-btn submit" onclick="submitScore()">決定</button>
                 </div>
             </div>
 
@@ -85,7 +85,7 @@
                     <h2>入力点数</h2>
                     <div class="current-score" id="currentScore">0</div>
                     <p class="guide-text">数字を入力して「決定」を押してください</p>
-                    <p class="warning-text" id="warningText">※ 20点までしか入力できません</p>
+                    <p class="warning-text" id="warningText">※ 10点までしか入力できません</p>
                 </div>
                 <button class="btn btn-unlock-request" id="unlockRequestBtn" onclick="requestUnlock()" style="display: none;">
                     打ち直し申請
@@ -106,6 +106,7 @@
             1: null, 2: null, 3: null, 4: null, 5: null
         }; // チーム別履歴(各チーム最新1件のみ)
         let testMode = false; // デバッグモード（子機名がtestの場合true）
+        const MAX_SCORE = 10;
 
         let clickCount = 0;
         let clickTimer = null;
@@ -326,9 +327,8 @@
             
             const newScore = currentScore * 10 + num;
             
-            // testモードでない場合のみ20点制限
-            if (!testMode && newScore > 20) {
-                showError('20点を超えることはできません');
+            if (!testMode && newScore > MAX_SCORE) {
+                showError(`${MAX_SCORE}点を超えることはできません`);
                 return;
             }
             
@@ -346,6 +346,17 @@
         function clearScore() {
             if (isLocked) return;
             currentScore = 0;
+            updateScoreDisplay();
+            updateButtonStates();
+        }
+
+        function setScoreTen() {
+            if (isLocked) return;
+            if (testMode) {
+                currentScore = 10;
+            } else {
+                currentScore = MAX_SCORE;
+            }
             updateScoreDisplay();
             updateButtonStates();
         }
@@ -411,43 +422,36 @@
                 return;
             }
             
-            // 通常モード: 20点制限
+            // 通常モード: 10点制限
+            const tenBtn = document.getElementById('tenBtn');
             if (currentScore === 0) {
-                // 初期状態: 全てのボタン有効
                 buttons.forEach(btn => {
                     btn.classList.remove('disabled-btn');
                     btn.disabled = false;
                 });
-            } else if (currentScore === 1) {
-                // 1が入力済み: 0-9まで全て有効（1+0〜1+9で最大19点）
-                buttons.forEach(btn => {
-                    btn.classList.remove('disabled-btn');
-                    btn.disabled = false;
-                });
-            } else if (currentScore === 2) {
-                // 2が入力済み: 0のみ有効（2+0で20点）、1-9は無効
-                buttons.forEach(btn => {
-                    const num = parseInt(btn.dataset.number);
-                    if (num === 0) {
-                        btn.classList.remove('disabled-btn');
-                        btn.disabled = false;
-                    } else {
-                        btn.classList.add('disabled-btn');
-                        btn.disabled = true;
-                    }
-                });
-            } else if (currentScore >= 3 && currentScore <= 9) {
-                // 3-9が入力済み: 全て無効（どれを押しても20点超える）
+                if (tenBtn) {
+                    tenBtn.classList.remove('disabled-btn');
+                    tenBtn.disabled = false;
+                }
+            } else if (currentScore >= 1 && currentScore < MAX_SCORE) {
+                // 1桁入力済み: 2桁にすると10超になるため数字は無効（10ボタンで10点にできる）
                 buttons.forEach(btn => {
                     btn.classList.add('disabled-btn');
                     btn.disabled = true;
                 });
-            } else if (currentScore >= 10) {
-                // 2桁の場合: 全て無効
+                if (tenBtn) {
+                    tenBtn.classList.remove('disabled-btn');
+                    tenBtn.disabled = false;
+                }
+            } else if (currentScore >= MAX_SCORE) {
                 buttons.forEach(btn => {
                     btn.classList.add('disabled-btn');
                     btn.disabled = true;
                 });
+                if (tenBtn) {
+                    tenBtn.classList.add('disabled-btn');
+                    tenBtn.disabled = true;
+                }
             }
         }
 

@@ -1203,6 +1203,11 @@ body {
     background: #0056b3;
 }
 
+.num-btn.num-btn-ten {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
 .num-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
