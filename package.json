@@ -12,6 +12,8 @@
     "dev": "nodemon server.js",
     "electron": "electron .",
     "electron:child": "electron electron/koki/main.js",
+    "predist:parent": "node scripts/stop-syukei-for-build.js",
+    "predist:child": "node scripts/stop-syukei-for-build.js",
     "dist:parent": "npm run icons && electron-builder --config electron-builder.parent.json",
     "dist:child": "npm run icons && electron-builder --config electron-builder.child.json",
     "dist:all": "npm run dist:parent && npm run dist:child",

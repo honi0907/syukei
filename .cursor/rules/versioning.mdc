@@ -8,3 +8,9 @@ alwaysApply: true
 - 形式: `メジャー.マイナー.パッチ`。詳細はリポジトリルートの `VERSIONING.md`。
 - **`1.0.x` のパッチは `0`〜`9` まで（`1.0.10` を使わない）。次は `1.1.0`。**
 - **`package.json` の version 変更・git tag・GitHub Release 作成の前に、必ずユーザーに確認する**（ユーザーが番号を明示した場合のみその番号で進める）。
+- **GitHub Release はユーザーが指示したときのみ**作成する。
+
+# ビルド（syukei）
+
+- **`npm run dist:all` / ビルド前**に `node scripts/stop-syukei-for-build.js` で親機・子機 exe を終了する（ロック回避）。
+- ローカル確認は **`ビルド.bat`** のあと **`親機起動.bat` / `子機起動.bat`**（`dist\*\win-unpacked` があればそちらを優先）。

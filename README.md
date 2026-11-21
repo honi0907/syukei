@@ -24,7 +24,8 @@ npm install
 npm run electron
 ```
 
-または `親機起動.bat` をダブルクリック。
+- **`ビルド.bat`** … 実行中アプリを終了してから親機・子機をパッケージ（`dist\parent` / `dist\child`）
+- **`親機起動.bat`** / **`子機起動.bat`** … `dist\*\win-unpacked` の exe があればそれを起動、無ければ開発モード
 
 1. ランチャーで **サーバーを起動**
 2. 表示された **親機 / 子機のURL** を確認（LAN用は別端末向け）
