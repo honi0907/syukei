@@ -157,37 +157,69 @@
             <section id="panel-layout" class="settings-panel active">
                 <header class="settings-panel-header">
                     <h2>レイアウト</h2>
-                    <p>点数・チーム名のサイズと位置</p>
+                    <p>点数・チーム名・帯のサイズと位置</p>
                 </header>
 
-                <div class="settings-field">
-                    <label for="digitSize">点数サイズ</label>
-                    <input type="range" id="digitSize" min="10" max="50" value="18" step="1" oninput="updateDigitSize(this.value)">
-                    <div class="settings-field-value"><span id="digitSizeValue">18</span> rem</div>
-                </div>
+                <div class="settings-layout-split">
+                    <nav class="settings-layout-tree" aria-label="レイアウト項目">
+                        <button type="button" class="settings-layout-tree-item active" data-layout-section="score">点数</button>
+                        <button type="button" class="settings-layout-tree-item" data-layout-section="team">チーム名</button>
+                        <button type="button" class="settings-layout-tree-item" data-layout-section="band">帯</button>
+                    </nav>
 
-                <div class="settings-field">
-                    <label for="digitGap">数字の間隔</label>
-                    <input type="range" id="digitGap" min="5" max="50" value="15" step="1" oninput="updateDigitGap(this.value)">
-                    <div class="settings-field-value"><span id="digitGapValue">15</span> px</div>
-                </div>
+                    <div class="settings-layout-sections">
+                        <div id="layout-section-score" class="settings-layout-section active">
+                            <h3 class="settings-layout-section-title">点数</h3>
+                            <div class="settings-field">
+                                <label for="digitSize">点数サイズ</label>
+                                <input type="range" id="digitSize" min="10" max="100" value="18" step="1" oninput="updateDigitSize(this.value)">
+                                <div class="settings-field-value"><span id="digitSizeValue">18</span> rem</div>
+                            </div>
 
-                <div class="settings-field">
-                    <label for="companyNamePosition">チーム名の位置（上から）</label>
-                    <input type="range" id="companyNamePosition" min="5" max="40" value="20" step="1" oninput="updateCompanyNamePosition(this.value)">
-                    <div class="settings-field-value"><span id="companyNamePositionValue">20</span> %</div>
-                </div>
+                            <div class="settings-field">
+                                <label for="digitGap">数字の間隔</label>
+                                <input type="range" id="digitGap" min="5" max="50" value="15" step="1" oninput="updateDigitGap(this.value)">
+                                <div class="settings-field-value"><span id="digitGapValue">15</span> px</div>
+                            </div>
 
-                <div class="settings-field-row">
-                    <div class="settings-field">
-                        <label for="scoreTop">点数の縦位置</label>
-                        <input type="range" id="scoreTop" min="10" max="90" value="50" step="1" oninput="updateScorePosition()">
-                        <div class="settings-field-value"><span id="scoreTopValue">50</span> %</div>
-                    </div>
-                    <div class="settings-field">
-                        <label for="scoreLeft">点数の横位置</label>
-                        <input type="range" id="scoreLeft" min="10" max="90" value="50" step="1" oninput="updateScorePosition()">
-                        <div class="settings-field-value"><span id="scoreLeftValue">50</span> %</div>
+                            <div class="settings-field-row">
+                                <div class="settings-field">
+                                    <label for="scoreTop">点数の縦位置</label>
+                                    <input type="range" id="scoreTop" min="10" max="90" value="50" step="1" oninput="updateScorePosition()">
+                                    <div class="settings-field-value"><span id="scoreTopValue">50</span> %</div>
+                                </div>
+                                <div class="settings-field">
+                                    <label for="scoreLeft">点数の横位置</label>
+                                    <input type="range" id="scoreLeft" min="10" max="90" value="50" step="1" oninput="updateScorePosition()">
+                                    <div class="settings-field-value"><span id="scoreLeftValue">50</span> %</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="layout-section-team" class="settings-layout-section" hidden>
+                            <h3 class="settings-layout-section-title">チーム名</h3>
+                            <div class="settings-field">
+                                <label for="companyNameSize">チーム名のサイズ</label>
+                                <input type="range" id="companyNameSize" min="2" max="30" value="5" step="0.5" oninput="updateCompanyNameSize(this.value)">
+                                <div class="settings-field-value"><span id="companyNameSizeValue">5</span> rem</div>
+                            </div>
+
+                            <div class="settings-field">
+                                <label for="companyNamePosition">チーム名の位置（上から）</label>
+                                <input type="range" id="companyNamePosition" min="5" max="40" value="20" step="1" oninput="updateCompanyNamePosition(this.value)">
+                                <div class="settings-field-value"><span id="companyNamePositionValue">20</span> %</div>
+                            </div>
+                        </div>
+
+                        <div id="layout-section-band" class="settings-layout-section" hidden>
+                            <h3 class="settings-layout-section-title">帯</h3>
+                            <div class="settings-field">
+                                <label for="bottomBandOffset">下帯の位置（画面下から）</label>
+                                <input type="range" id="bottomBandOffset" min="-60" max="120" value="-10" step="1" oninput="updateBottomBandPosition(this.value)">
+                                <div class="settings-field-value"><span id="bottomBandOffsetValue">-10</span> px（マイナスで下へ）</div>
+                                <p class="settings-field-hint">得点発表時の Good などの下帯画像の縦位置です。親機の設定画面とランキング表示が同期します。</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -195,7 +227,7 @@
             <section id="panel-animation" class="settings-panel">
                 <header class="settings-panel-header">
                     <h2>アニメーション</h2>
-                    <p>桁の停止タイミングと満点（30点）演出</p>
+                    <p>桁の停止・帯の出現タイミングと満点（30点）演出</p>
                 </header>
 
                 <div class="settings-field-row">
@@ -209,6 +241,12 @@
                         <input type="number" id="digit2StopTime" min="0" max="20" value="13" step="0.1" oninput="updateStopTiming()">
                         <div class="settings-field-hint">秒</div>
                     </div>
+                </div>
+
+                <div class="settings-field">
+                    <label for="bandRevealDelay">数字が決まってから帯・SEまで</label>
+                    <input type="number" id="bandRevealDelay" min="0" max="10" value="1.3" step="0.1" oninput="updateStopTiming()">
+                    <div class="settings-field-hint">秒（2桁目が止まってから、帯のスライドと Good/Excellent 音を同時に開始）</div>
                 </div>
 
                 <div class="settings-field">

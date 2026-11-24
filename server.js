@@ -4,6 +4,7 @@ const socketIo = require('socket.io');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const ExcelJS = require('exceljs');
 
 const app = express();
 const server = http.createServer(app);
@@ -666,50 +667,194 @@ function formatScoresMatrixCsv(matrix) {
     return `\uFEFF${lines.join('\r\n')}`;
 }
 
+const VIEWER_EXPORT_BANDS = [
+    { title: 'セット１〜２', indices: [0, 1] },
+    { title: 'セット３〜４', indices: [2, 3] },
+    { title: 'セット５〜６', indices: [4, 5] }
+];
+
+function viewerNameLabel(participant) {
+    const display = (participant.displayName || '').trim();
+    const id = participant.id || '';
+    if (display && display !== id) {
+        return `${id} ${display}`;
+    }
+    return display || id;
+}
+
+const SHEET_BORDER = {
+    top: { style: 'thin', color: { argb: 'FF868E96' } },
+    left: { style: 'thin', color: { argb: 'FF868E96' } },
+    bottom: { style: 'thin', color: { argb: 'FF868E96' } },
+    right: { style: 'thin', color: { argb: 'FF868E96' } }
+};
+
+function paintSheetCell(cell, { value, fill, bold = false, color = 'FF212529', size = 10, horizontal = 'center', wrap = false }) {
+    cell.value = value;
+    cell.border = SHEET_BORDER;
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+    cell.font = { name: 'Meiryo', size, bold, color: { argb: color } };
+    cell.alignment = { vertical: 'middle', horizontal, wrapText: wrap };
+}
+
+function paintMergedRow(ws, row, colCount, fill) {
+    for (let col = 1; col <= colCount; col += 1) {
+        const cell = ws.getCell(row, col);
+        cell.border = SHEET_BORDER;
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+    }
+}
+
 /**
+ * 観覧画面と同じ3段（各2セット）の xlsx。罫線・見出し色つき。
  * @param {ReturnType<typeof buildScoresMatrixAllSets>} matrix
  */
-function formatScoresMatrixAllSetsCsv(matrix) {
-    const escape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-    const headerTop = ['ID', '表示名'];
-    matrix.sets.forEach((setBlock) => {
-        headerTop.push(setBlock.setName);
-        for (let i = 1; i < setBlock.teamNames.length; i += 1) {
-            headerTop.push('');
-        }
-        headerTop.push(`${setBlock.setName} 小計`);
-    });
-    headerTop.push('総合');
+async function formatScoresMatrixAllSetsWorkbook(matrix) {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('全セット', { views: [{ showGridLines: false }] });
+    const colCount = 1 + (2 * TEAM_COUNT);
+    ws.getColumn(1).width = 22;
+    for (let col = 2; col <= colCount; col += 1) {
+        ws.getColumn(col).width = 16;
+    }
 
-    const headerSub = ['', ''];
-    matrix.sets.forEach((setBlock) => {
-        setBlock.teamNames.forEach((name) => headerSub.push(name));
-        headerSub.push('小計');
-    });
-    headerSub.push('');
+    const currentSet = matrix.currentSet || 1;
+    const currentSetName = matrix.sets[currentSet - 1]?.setName || `セット${currentSet}`;
+    let row = 1;
 
-    const lines = [
-        headerTop.map(escape).join(','),
-        headerSub.map(escape).join(',')
-    ];
+    ws.mergeCells(row, 1, row, colCount);
+    const title = ws.getCell(row, 1);
+    title.value = '点数集計（全セット一覧）';
+    title.font = { name: 'Meiryo', size: 14, bold: true, color: { argb: 'FF212529' } };
+    title.alignment = { vertical: 'middle', horizontal: 'left' };
+    ws.getRow(row).height = 24;
+    row += 1;
 
-    matrix.participants.forEach((p) => {
-        const row = [p.id, p.displayName];
-        p.scoresBySet.forEach((teamRow, idx) => {
-            row.push(...teamRow, p.setTotals[idx]);
+    ws.mergeCells(row, 1, row, colCount);
+    const meta = ws.getCell(row, 1);
+    meta.value = `操作中: ${currentSetName} / チーム${matrix.currentRound || 1}`;
+    meta.font = { name: 'Meiryo', size: 9, color: { argb: 'FF495057' } };
+    meta.alignment = { vertical: 'middle', horizontal: 'left' };
+    ws.getRow(row).height = 18;
+    row += 1;
+
+    VIEWER_EXPORT_BANDS.forEach((band) => {
+        ws.mergeCells(row, 1, row, colCount);
+        paintSheetCell(ws.getCell(row, 1), {
+            value: band.title,
+            fill: 'FF495057',
+            bold: true,
+            color: 'FFFFFFFF',
+            size: 11,
+            horizontal: 'left'
         });
-        row.push(p.total);
-        lines.push(row.map(escape).join(','));
+        paintMergedRow(ws, row, colCount, 'FF495057');
+        ws.getRow(row).height = 22;
+        row += 1;
+
+        const headerRow = row;
+        const teamRow = row + 1;
+        ws.mergeCells(headerRow, 1, teamRow, 1);
+        paintSheetCell(ws.getCell(headerRow, 1), {
+            value: '名前',
+            fill: 'FF495057',
+            bold: true,
+            color: 'FFFFFFFF'
+        });
+        const nameContinued = ws.getCell(teamRow, 1);
+        nameContinued.border = SHEET_BORDER;
+        nameContinued.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF495057' } };
+
+        let col = 2;
+        band.indices.forEach((setIdx) => {
+            const setBlock = matrix.sets[setIdx];
+            if (!setBlock) {
+                return;
+            }
+            const current = setBlock.set === currentSet;
+            const headFill = current ? 'FFFAB005' : 'FF495057';
+            const headColor = current ? 'FF212529' : 'FFFFFFFF';
+            ws.mergeCells(headerRow, col, headerRow, col + TEAM_COUNT - 1);
+            paintSheetCell(ws.getCell(headerRow, col), {
+                value: setBlock.setName,
+                fill: headFill,
+                bold: true,
+                color: headColor
+            });
+            for (let i = 1; i < TEAM_COUNT; i += 1) {
+                const spanned = ws.getCell(headerRow, col + i);
+                spanned.border = SHEET_BORDER;
+                spanned.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headFill } };
+            }
+            setBlock.teamNames.forEach((name, i) => {
+                const selected = current && i === (matrix.currentRound || 1) - 1;
+                paintSheetCell(ws.getCell(teamRow, col + i), {
+                    value: name || `チーム${i + 1}`,
+                    fill: selected ? 'FF1C7ED6' : (current ? 'FFFAB005' : 'FFE9ECEF'),
+                    bold: true,
+                    color: selected ? 'FFFFFFFF' : 'FF212529',
+                    size: 9,
+                    wrap: true
+                });
+            });
+            col += TEAM_COUNT;
+        });
+        ws.getRow(headerRow).height = 20;
+        ws.getRow(teamRow).height = 48;
+        row = teamRow + 1;
+
+        matrix.participants.forEach((participant, index) => {
+            const alt = index % 2 === 1;
+            paintSheetCell(ws.getCell(row, 1), {
+                value: viewerNameLabel(participant),
+                fill: 'FFF8F9FA',
+                horizontal: 'left',
+                wrap: true
+            });
+            let scoreCol = 2;
+            band.indices.forEach((setIdx) => {
+                const setBlock = matrix.sets[setIdx];
+                const current = Boolean(setBlock) && setBlock.set === currentSet;
+                (participant.scoresBySet[setIdx] || []).forEach((score) => {
+                    paintSheetCell(ws.getCell(row, scoreCol), {
+                        value: Number(score) || 0,
+                        fill: current ? 'FFFFF3BF' : (alt ? 'FFFAFAFA' : 'FFFFFFFF'),
+                        bold: current
+                    });
+                    scoreCol += 1;
+                });
+            });
+            ws.getRow(row).height = 20;
+            row += 1;
+        });
+
+        paintSheetCell(ws.getCell(row, 1), {
+            value: 'チーム合計',
+            fill: 'FFCED4DA',
+            bold: true,
+            horizontal: 'left'
+        });
+        let totalCol = 2;
+        band.indices.forEach((setIdx) => {
+            const setBlock = matrix.sets[setIdx];
+            if (!setBlock) {
+                return;
+            }
+            const current = setBlock.set === currentSet;
+            setBlock.teamTotals.forEach((total) => {
+                paintSheetCell(ws.getCell(row, totalCol), {
+                    value: Number(total) || 0,
+                    fill: current ? 'FFFFE08A' : 'FFCED4DA',
+                    bold: true
+                });
+                totalCol += 1;
+            });
+        });
+        ws.getRow(row).height = 22;
+        row += 2;
     });
 
-    const totalRow = ['', 'チーム合計'];
-    matrix.sets.forEach((setBlock) => {
-        totalRow.push(...setBlock.teamTotals, setBlock.setTotal);
-    });
-    totalRow.push(matrix.grandTotal);
-    lines.push(totalRow.map(escape).join(','));
-
-    return `\uFEFF${lines.join('\r\n')}`;
+    return wb.xlsx.writeBuffer();
 }
 
 function disconnectDuplicateClientSockets(clientId, keepSocketId) {
@@ -829,16 +974,29 @@ app.get('/api/scores-matrix.csv', (_req, res) => {
     res.send(formatScoresMatrixCsv(matrix));
 });
 
-app.get('/api/scores-matrix-all.csv', (_req, res) => {
-    const matrix = buildScoresMatrixAllSets();
-    const stamp = new Date().toISOString().slice(0, 10);
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="syukei-scores-all-sets-${stamp}.csv"`
-    );
-    res.send(formatScoresMatrixAllSetsCsv(matrix));
-});
+async function sendScoresMatrixAllSetsWorkbook(_req, res) {
+    try {
+        const matrix = buildScoresMatrixAllSets();
+        const stamp = new Date().toISOString().slice(0, 10);
+        const buffer = await formatScoresMatrixAllSetsWorkbook(matrix);
+        res.setHeader(
+            'Content-Type',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+        res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="syukei-scores-all-sets-${stamp}.xlsx"`
+        );
+        res.send(Buffer.from(buffer));
+    } catch (error) {
+        console.error('全セットExcel出力エラー:', error);
+        res.status(500).send('Excelの作成に失敗しました');
+    }
+}
+
+app.get('/api/scores-matrix-all.csv', sendScoresMatrixAllSetsWorkbook);
+app.get('/api/scores-matrix-all.xls', sendScoresMatrixAllSetsWorkbook);
+app.get('/api/scores-matrix-all.xlsx', sendScoresMatrixAllSetsWorkbook);
 
 app.post('/api/client-names/load', (req, res) => {
     try {
@@ -1592,6 +1750,11 @@ io.on('connection', (socket) => {
         io.emit('digit-gap-changed', { gap: data.gap });
     });
     
+    socket.on('update-company-name-size', (data) => {
+        console.log('チーム名サイズ変更:', data.size);
+        io.emit('company-name-size-changed', { size: data.size });
+    });
+
     socket.on('update-company-name-position', (data) => {
         console.log('会社名位置変更:', data.position);
         io.emit('company-name-position-changed', { position: data.position });
@@ -1600,6 +1763,11 @@ io.on('connection', (socket) => {
     socket.on('update-score-position', (data) => {
         console.log('点数位置変更:', data);
         io.emit('score-position-changed', data);
+    });
+
+    socket.on('update-bottom-band-position', (data) => {
+        console.log('下帯位置変更:', data.offset);
+        io.emit('bottom-band-position-changed', { offset: data.offset });
     });
     
     socket.on('update-stop-timing', (data) => {

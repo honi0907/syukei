@@ -1997,6 +1997,84 @@ body {
     animation: fadeIn 0.25s ease-out;
 }
 
+#panel-layout {
+    max-width: 820px;
+}
+
+.settings-layout-split {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+}
+
+.settings-layout-tree {
+    flex: 0 0 168px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 8px 0;
+    border-right: 1px solid #dee2e6;
+    min-height: 200px;
+}
+
+.settings-layout-tree-item {
+    position: relative;
+    text-align: left;
+    border: none;
+    background: transparent;
+    color: #495057;
+    padding: 10px 12px 10px 28px;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.settings-layout-tree-item::before {
+    content: '└';
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #adb5bd;
+    font-size: 0.85rem;
+    line-height: 1;
+}
+
+.settings-layout-tree-item:hover {
+    background: #f1f3f5;
+    color: #212529;
+}
+
+.settings-layout-tree-item.active {
+    background: #e7f5ff;
+    color: #1971c2;
+    font-weight: 600;
+}
+
+.settings-layout-tree-item.active::before {
+    color: #339af0;
+}
+
+.settings-layout-sections {
+    flex: 1;
+    min-width: 0;
+}
+
+.settings-layout-section[hidden] {
+    display: none !important;
+}
+
+.settings-layout-section-title {
+    margin: 0 0 20px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #343a40;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e9ecef;
+}
+
 .settings-panel.active {
     display: block;
 }
@@ -2221,6 +2299,28 @@ body {
     .settings-color-row {
         grid-template-columns: 1fr;
     }
+
+    .settings-layout-split {
+        flex-direction: column;
+    }
+
+    .settings-layout-tree {
+        flex: none;
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+        border-right: none;
+        border-bottom: 1px solid #dee2e6;
+        padding-bottom: 12px;
+    }
+
+    .settings-layout-tree-item {
+        padding-left: 14px;
+    }
+
+    .settings-layout-tree-item::before {
+        display: none;
+    }
 }
 
 /* ==================== 点数一覧（マトリクス・CSV） ==================== */
@@ -2403,6 +2503,64 @@ body {
     color: #495057;
 }
 
+.viewer-focus-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 12px;
+    padding: 0 4px;
+}
+
+.viewer-focus-btn {
+    border: 1px solid #868e96;
+    background: #fff;
+    color: #212529;
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 0.92rem;
+    cursor: pointer;
+}
+
+.viewer-focus-btn.is-active {
+    background: #343a40;
+    color: #fff;
+    border-color: #343a40;
+}
+
+.viewer-set-zoom {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    padding: 0;
+}
+
+.viewer-set-zoom:hover {
+    text-decoration: underline;
+}
+
+.viewer-excel-page.is-focused .excel-matrix {
+    font-size: 1.35rem;
+}
+
+.viewer-excel-page.is-focused .excel-matrix .head-set-row th {
+    font-size: 1.45rem;
+    padding: 14px 10px;
+}
+
+.viewer-excel-page.is-focused .excel-matrix .head-team-row th {
+    font-size: 1.15rem;
+    padding: 12px 8px;
+}
+
+.viewer-excel-page.is-focused .excel-matrix td {
+    padding: 12px 8px;
+}
+
 .viewer-excel-stack {
     display: flex;
     flex-direction: column;
@@ -2425,9 +2583,8 @@ body {
 }
 
 .viewer-excel-wrap {
-    overflow: auto;
-    max-height: calc(50vh - 70px);
-    min-height: 120px;
+    overflow-x: auto;
+    overflow-y: visible;
     background: #fff;
     border: 1px solid #adb5bd;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
@@ -2474,11 +2631,14 @@ body {
 }
 
 .excel-matrix {
-    width: max-content;
-    min-width: 100%;
+    width: 100%;
     border-collapse: collapse;
     font-size: 0.9rem;
     table-layout: fixed;
+}
+
+.excel-matrix .viewer-col-name {
+    width: 9.5rem;
 }
 
 .excel-matrix th,
@@ -2501,9 +2661,11 @@ body {
 }
 
 .excel-matrix .sticky-name {
-    left: 72px;
-    min-width: 120px;
-    max-width: 200px;
+    left: 0;
+    width: 9.5rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
 }
 
 .excel-matrix .sticky-id {
@@ -2553,7 +2715,13 @@ body {
 }
 
 .excel-matrix .head-team-row th {
-    font-size: 0.82rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    vertical-align: bottom;
 }
 
 .excel-matrix thead .sticky-col {
@@ -2591,6 +2759,16 @@ body {
 .excel-matrix thead .set-group-current {
     background: #fab005;
     color: #212529;
+}
+
+.excel-matrix thead .head-team-row th.team-selected {
+    background: #1c7ed6;
+    color: #fff;
+    font-weight: 700;
+}
+
+.excel-matrix td.team-selected {
+    box-shadow: inset 3px 0 0 #1c7ed6, inset -3px 0 0 #1c7ed6;
 }
 
 .excel-matrix tbody tr:nth-child(even) td:not(.set-group-current):not(.subtotal-col):not(.grand-col) {

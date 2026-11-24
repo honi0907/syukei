@@ -11,25 +11,29 @@
     <header class="viewer-excel-header">
         <div>
             <h1>点数集計（全セット一覧）</h1>
-            <p class="viewer-excel-lead">上段：セット1〜3　下段：セット4〜6（各6チーム）。確定点数のみ表示。</p>
+            <p class="viewer-excel-lead" id="leadLine">上段：セット1〜2　中段：セット3〜4　下段：セット5〜6。セット名を押すとそのセットだけ大きく表示します。</p>
         </div>
         <div class="viewer-excel-actions">
             <button type="button" class="btn btn-primary" id="refreshBtn">更新</button>
-            <button type="button" class="btn btn-primary" id="csvBtn">CSV</button>
+            <button type="button" class="btn btn-primary" id="csvBtn">Excel</button>
             <span class="viewer-excel-live" id="liveBadge" hidden><span class="viewer-excel-dot"></span>接続中</span>
         </div>
     </header>
 
     <p class="viewer-excel-meta" id="metaLine">読み込み中…</p>
+    <div class="viewer-focus-bar" id="focusBar"></div>
     <div class="viewer-excel-stack" id="matrixStack"></div>
     <p id="emptyHint" class="viewer-excel-empty" hidden>接続中の子機がありません。</p>
 
     <script>
         const socket = io();
         const TEAM_COUNT = 6;
+        let focusedSet = null;
+        let latestMatrix = null;
         const BANDS = [
-            { title: 'セット１〜３', indices: [0, 1, 2] },
-            { title: 'セット４〜６', indices: [3, 4, 5] }
+            { title: 'セット１〜２', indices: [0, 1] },
+            { title: 'セット３〜４', indices: [2, 3] },
+            { title: 'セット５〜６', indices: [4, 5] }
         ];
 
         function escapeHtml(text) {
@@ -40,10 +44,10 @@
                 .replace(/"/g, '&quot;');
         }
 
-        function formatTeamShort(name, index) {
+        function formatTeamLabel(name, index) {
             const raw = (name || '').replace(/チーム/g, '').trim();
             if (raw) {
-                return raw.length > 8 ? `${raw.slice(0, 8)}…` : raw;
+                return raw;
             }
             return ['A', 'B', 'C', 'D', 'E', 'F'][index] || String(index + 1);
         }
@@ -57,27 +61,34 @@
             return display || id;
         }
 
-        function buildBand(matrix, band, currentSet) {
+        function groupClass(setBlock, currentSet, teamIndex, currentRound) {
+            const selected = setBlock.set === currentSet && teamIndex === currentRound - 1;
+            return [
+                'set-group',
+                setBlock.set === currentSet ? 'set-group-current' : '',
+                selected ? 'team-selected' : ''
+            ].filter(Boolean).join(' ');
+        }
+
+        function buildBand(matrix, band, currentSet, currentRound) {
             const setHeader = band.indices.map((setIdx) => {
                 const setBlock = matrix.sets[setIdx];
                 const cls = setBlock.set === currentSet ? 'set-group set-group-current' : 'set-group';
-                return `<th colspan="${TEAM_COUNT}" class="${cls}">${escapeHtml(setBlock.setName)}</th>`;
+                return `<th colspan="${TEAM_COUNT}" class="${cls}"><button type="button" class="viewer-set-zoom" data-set="${setBlock.set}">${escapeHtml(setBlock.setName)}</button></th>`;
             }).join('');
 
             const teamHeader = band.indices.map((setIdx) => {
                 const setBlock = matrix.sets[setIdx];
-                const cls = setBlock.set === currentSet ? 'set-group set-group-current' : 'set-group';
                 return setBlock.teamNames.map((name, i) =>
-                    `<th class="${cls} team-col" title="${escapeHtml(name)}">${escapeHtml(formatTeamShort(name, i))}</th>`
+                    `<th class="${groupClass(setBlock, currentSet, i, currentRound)} team-col" title="${escapeHtml(name)}">${escapeHtml(formatTeamLabel(name, i))}</th>`
                 ).join('');
             }).join('');
 
             const body = matrix.participants.map((p) => {
                 const scores = band.indices.map((setIdx) => {
                     const setBlock = matrix.sets[setIdx];
-                    const cls = setBlock.set === currentSet ? 'set-group set-group-current' : 'set-group';
-                    return p.scoresBySet[setIdx].map((score) =>
-                        `<td class="num ${cls}">${score}</td>`
+                    return p.scoresBySet[setIdx].map((score, i) =>
+                        `<td class="num ${groupClass(setBlock, currentSet, i, currentRound)}">${score}</td>`
                     ).join('');
                 }).join('');
                 return `
@@ -90,15 +101,21 @@
 
             const totals = band.indices.map((setIdx) => {
                 const setBlock = matrix.sets[setIdx];
-                const cls = setBlock.set === currentSet ? 'set-group set-group-current' : 'set-group';
-                return setBlock.teamTotals.map((t) => `<td class="num ${cls}">${t}</td>`).join('');
+                return setBlock.teamTotals.map((t, i) =>
+                    `<td class="num ${groupClass(setBlock, currentSet, i, currentRound)}">${t}</td>`
+                ).join('');
             }).join('');
+
+            const cols = `<col class="viewer-col-name">${band.indices.map(() =>
+                Array.from({ length: TEAM_COUNT }, () => '<col class="viewer-col-team">').join('')
+            ).join('')}`;
 
             return `
                 <section class="viewer-excel-band">
                     <h2 class="viewer-excel-band-title">${escapeHtml(band.title)}</h2>
                     <div class="viewer-excel-wrap">
                         <table class="excel-matrix">
+                            <colgroup>${cols}</colgroup>
                             <thead>
                                 <tr class="head-set-row">
                                     <th class="sticky-col sticky-name" rowspan="2">名前</th>
@@ -119,18 +136,54 @@
             `;
         }
 
+        function renderFocusBar(matrix) {
+            const buttons = [`<button type="button" class="viewer-focus-btn${focusedSet ? '' : ' is-active'}" data-set="0">一覧</button>`];
+            matrix.sets.forEach((setBlock) => {
+                const active = focusedSet === setBlock.set ? ' is-active' : '';
+                buttons.push(
+                    `<button type="button" class="viewer-focus-btn${active}" data-set="${setBlock.set}">${escapeHtml(setBlock.setName)}</button>`
+                );
+            });
+            document.getElementById('focusBar').innerHTML = buttons.join('');
+        }
+
+        function setFocusedSet(setNumber) {
+            focusedSet = setNumber >= 1 ? setNumber : null;
+            if (latestMatrix) {
+                renderMatrix(latestMatrix);
+            }
+        }
+
         function renderMatrix(matrix) {
+            latestMatrix = matrix;
             const stack = document.getElementById('matrixStack');
             const empty = document.getElementById('emptyHint');
             const meta = document.getElementById('metaLine');
+            const lead = document.getElementById('leadLine');
             const currentSet = matrix.currentSet || 1;
+            const currentRound = matrix.currentRound || 1;
+            document.body.classList.toggle('is-focused', Boolean(focusedSet));
+            renderFocusBar(matrix);
 
             if (!matrix.participants.length) {
                 stack.innerHTML = '';
                 empty.hidden = false;
-            } else {
+            } else if (focusedSet && matrix.sets[focusedSet - 1]) {
                 empty.hidden = true;
-                stack.innerHTML = BANDS.map((band) => buildBand(matrix, band, currentSet)).join('');
+                const setBlock = matrix.sets[focusedSet - 1];
+                stack.innerHTML = buildBand(
+                    matrix,
+                    { title: setBlock.setName, indices: [focusedSet - 1] },
+                    currentSet,
+                    currentRound
+                );
+                lead.textContent = `${setBlock.setName} を大きく表示中。一覧で全セットに戻ります。`;
+            } else {
+                focusedSet = null;
+                document.body.classList.remove('is-focused');
+                empty.hidden = true;
+                stack.innerHTML = BANDS.map((band) => buildBand(matrix, band, currentSet, currentRound)).join('');
+                lead.textContent = '上段：セット1〜2　中段：セット3〜4　下段：セット5〜6。セット名を押すとそのセットだけ大きく表示します。';
             }
 
             const currentSetName = matrix.sets[currentSet - 1]?.setName || `セット${currentSet}`;
@@ -154,9 +207,24 @@
             }
         }
 
+        document.getElementById('focusBar').addEventListener('click', (event) => {
+            const button = event.target.closest('[data-set]');
+            if (!button) {
+                return;
+            }
+            setFocusedSet(Number(button.dataset.set));
+        });
+        document.getElementById('matrixStack').addEventListener('click', (event) => {
+            const button = event.target.closest('.viewer-set-zoom');
+            if (!button) {
+                return;
+            }
+            setFocusedSet(Number(button.dataset.set));
+        });
+
         document.getElementById('refreshBtn').addEventListener('click', loadMatrix);
         document.getElementById('csvBtn').addEventListener('click', () => {
-            window.location.href = '/api/scores-matrix-all.csv';
+            window.location.href = '/api/scores-matrix-all.xlsx';
         });
 
         function bindRealtime() {

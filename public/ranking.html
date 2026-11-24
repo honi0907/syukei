@@ -115,7 +115,7 @@
         /* 下部帯 */
         .bottom-band {
             position: fixed;
-            bottom: -10px;
+            bottom: var(--bottom-band-offset, -10px);
             left: 0;
             width: 100%;
             height: auto;
@@ -272,7 +272,27 @@
             width: calc(var(--digit-size, 18rem) * 0.61);
             position: relative;
             background: transparent;
-            clip-path: inset(10% 0 10% 0);
+        }
+
+        .digit-container.is-rolling {
+            -webkit-mask-image: linear-gradient(
+                to bottom,
+                transparent 0%,
+                #000 12%,
+                #000 88%,
+                transparent 100%
+            );
+            mask-image: linear-gradient(
+                to bottom,
+                transparent 0%,
+                #000 12%,
+                #000 88%,
+                transparent 100%
+            );
+            -webkit-mask-size: 100% 100%;
+            mask-size: 100% 100%;
+            -webkit-mask-repeat: no-repeat;
+            mask-repeat: no-repeat;
         }
 
         .digit-roller {
@@ -908,6 +928,22 @@
             ctx.fillText(digit, width / 2, height / 2);
         }
         
+        function getCompanyNameSizeRem() {
+            const raw = getComputedStyle(document.documentElement).getPropertyValue('--company-name-size').trim();
+            const parsed = parseFloat(raw);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : 5;
+        }
+
+        function getCompanyNameFontFamily() {
+            const raw = getComputedStyle(document.documentElement).getPropertyValue('--digit-font').trim();
+            return raw || 'Poppins, sans-serif';
+        }
+
+        function getCompanyNameFontPx() {
+            const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+            return getCompanyNameSizeRem() * rootPx;
+        }
+
         // 会社名をCanvasで描画
         function drawCompanyNameOnCanvas(canvas, text) {
             const ctx = canvas.getContext('2d');
@@ -930,8 +966,9 @@
             ctx.shadowOffsetX = 0;
             ctx.shadowOffsetY = 3;
             
-            // フォント設定
-            ctx.font = `bold 80px Poppins, sans-serif`;
+            const fontPx = getCompanyNameFontPx();
+            const fontFamily = getCompanyNameFontFamily();
+            ctx.font = `bold ${fontPx}px ${fontFamily}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
@@ -964,14 +1001,16 @@
         // デフォルトのサイズと間隔を設定
         document.documentElement.style.setProperty('--digit-size', '35rem');
         document.documentElement.style.setProperty('--digit-gap', '15px');
+        document.documentElement.style.setProperty('--company-name-size', '5rem');
         document.documentElement.style.setProperty('--company-name-position', '13%');
         document.documentElement.style.setProperty('--score-top', '61%');
         document.documentElement.style.setProperty('--score-left', '50%');
         
         // 停止タイミング設定（デフォルト値）
         let stopTiming = {
-            digit1: 11000,  // 十の位: 11秒後
-            digit2: 13000   // 一の位: 13秒後
+            digit1: 11000,
+            digit2: 13000,
+            bandReveal: 1300
         };
         
         // 数字用グラデーション色の設定
@@ -1010,6 +1049,11 @@
                 document.documentElement.style.setProperty('--digit-gap', digitGap + 'px');
             }
             
+            const companyNameSize = localStorage.getItem('ranking_companyNameSize');
+            if (companyNameSize) {
+                document.documentElement.style.setProperty('--company-name-size', companyNameSize + 'rem');
+            }
+
             // 会社名の位置
             const companyNamePosition = localStorage.getItem('ranking_companyNamePosition');
             if (companyNamePosition) {
@@ -1021,6 +1065,11 @@
             const scoreLeft = localStorage.getItem('ranking_scoreLeft');
             if (scoreTop) document.documentElement.style.setProperty('--score-top', scoreTop + '%');
             if (scoreLeft) document.documentElement.style.setProperty('--score-left', scoreLeft + '%');
+
+            const bottomBandOffset = localStorage.getItem('ranking_bottomBandOffset');
+            if (bottomBandOffset !== null && bottomBandOffset !== '') {
+                document.documentElement.style.setProperty('--bottom-band-offset', `${bottomBandOffset}px`);
+            }
             
             // 停止タイミング
             const digit1StopTime = localStorage.getItem('ranking_digit1StopTime');
@@ -1028,6 +1077,10 @@
             if (digit1StopTime && digit2StopTime) {
                 stopTiming.digit1 = parseFloat(digit1StopTime) * 1000;
                 stopTiming.digit2 = parseFloat(digit2StopTime) * 1000;
+            }
+            const bandRevealDelay = localStorage.getItem('ranking_bandRevealDelay');
+            if (bandRevealDelay !== null && bandRevealDelay !== '') {
+                stopTiming.bandReveal = parseFloat(bandRevealDelay) * 1000;
             }
             
             // 100点演出
@@ -1118,13 +1171,15 @@
                 // テキストの幅を測定してキャンバスサイズを決定
                 const tempCanvas = document.createElement('canvas');
                 const tempCtx = tempCanvas.getContext('2d');
-                tempCtx.font = 'bold 80px Poppins, sans-serif';
+                const fontPx = getCompanyNameFontPx();
+                const fontFamily = getCompanyNameFontFamily();
+                tempCtx.font = `bold ${fontPx}px ${fontFamily}`;
                 const textWidth = tempCtx.measureText(name).width;
                 
                 // キャンバスを作成
                 const canvas = document.createElement('canvas');
-                canvas.width = textWidth + 100; // 余白を追加
-                canvas.height = 120;
+                canvas.width = Math.ceil(textWidth + Math.max(100, fontPx * 1.2));
+                canvas.height = Math.ceil(fontPx * 1.5);
                 companyNameDiv.appendChild(canvas);
                 
                 // 会社名を描画
@@ -1178,6 +1233,11 @@
             if (title) {
                 title.style.fontFamily = data.fontFamily;
             }
+
+            const companyNameEl = document.getElementById('companyName');
+            if (companyNameEl && companyNameEl.dataset.text) {
+                updateCompanyName(companyNameEl.dataset.text);
+            }
         });
         
         // 点数サイズ変更を受信
@@ -1195,6 +1255,16 @@
         });
         
         // 会社名位置変更を受信
+        socket.on('company-name-size-changed', (data) => {
+            console.log('チーム名サイズ変更受信:', data.size);
+            localStorage.setItem('ranking_companyNameSize', data.size);
+            document.documentElement.style.setProperty('--company-name-size', data.size + 'rem');
+            const companyNameEl = document.getElementById('companyName');
+            if (companyNameEl && companyNameEl.dataset.text) {
+                updateCompanyName(companyNameEl.dataset.text);
+            }
+        });
+
         socket.on('company-name-position-changed', (data) => {
             console.log('会社名位置変更受信:', data.position);
             localStorage.setItem('ranking_companyNamePosition', data.position);
@@ -1209,13 +1279,26 @@
             document.documentElement.style.setProperty('--score-top', data.top + '%');
             document.documentElement.style.setProperty('--score-left', data.left + '%');
         });
+
+        socket.on('bottom-band-position-changed', (data) => {
+            console.log('下帯位置変更受信:', data.offset);
+            localStorage.setItem('ranking_bottomBandOffset', data.offset);
+            document.documentElement.style.setProperty('--bottom-band-offset', `${data.offset}px`);
+        });
         
         // 停止タイミング変更を受信
         socket.on('stop-timing-changed', (data) => {
             console.log('停止タイミング変更受信:', data);
-            stopTiming = data;
+            stopTiming = {
+                digit1: data.digit1,
+                digit2: data.digit2,
+                bandReveal: data.bandReveal ?? stopTiming.bandReveal ?? 1300
+            };
             localStorage.setItem('ranking_digit1StopTime', data.digit1 / 1000);
             localStorage.setItem('ranking_digit2StopTime', data.digit2 / 1000);
+            if (data.bandReveal !== undefined) {
+                localStorage.setItem('ranking_bandRevealDelay', data.bandReveal / 1000);
+            }
         });
         
         // 100点演出変更を受信
@@ -1575,6 +1658,7 @@
             rollers.forEach(roller => {
                 roller.style.transition = 'transform 0.3s ease-out';
                 roller.style.transform = 'translateY(0)';
+                roller.closest('.digit-container')?.classList.remove('is-rolling');
             });
         }
 
@@ -1637,26 +1721,20 @@
                 topBand.style.transform = 'translateX(100%)';
                 bottomBand.style.transform = 'translateX(-100%)';
                 
-                // 帯のアニメーション開始
-                setTimeout(() => {
+                requestAnimationFrame(() => {
                     console.log('Adding animate class to bands');
                     topBand.classList.add('animate');
                     bottomBand.classList.add('animate');
-                    console.log('topBand classes:', topBand.className);
-                    
-                    // スコアに応じてSEを再生（0.2秒遅延）
-                    setTimeout(() => {
-                        if (isGreatRankingBand(bandScore)) {
-                            const excellentSound = document.getElementById('soundExcellent');
-                            excellentSound.currentTime = 0;
-                            excellentSound.play();
-                        } else if (isGoodRankingBand(bandScore) || bandScore === 0) {
-                            const goodSound = document.getElementById('soundGood');
-                            goodSound.currentTime = 0;
-                            goodSound.play();
-                        }
-                    }, 200);
-                }, 100);
+                    if (isGreatRankingBand(bandScore)) {
+                        const excellentSound = document.getElementById('soundExcellent');
+                        excellentSound.currentTime = 0;
+                        excellentSound.play();
+                    } else if (isGoodRankingBand(bandScore) || bandScore === 0) {
+                        const goodSound = document.getElementById('soundGood');
+                        goodSound.currentTime = 0;
+                        goodSound.play();
+                    }
+                });
                 
                 // 満点（30点）のときだけ特別演出
                 if (bandScore === SCORE_DISPLAY_MAX) {
@@ -1738,7 +1816,10 @@
                 document.getElementById('digit1'),
                 document.getElementById('digit0')
             ];
-            
+            rollers.forEach((roller) => {
+                roller.closest('.digit-container')?.classList.add('is-rolling');
+            });
+
             // 最終的な回転間隔（最高速度）
             const finalRollSpeeds = [
                 70,  // 70ms（少し遅めで見やすく）
@@ -1847,10 +1928,9 @@
                     snapToTarget(rollers[0], targetDigits[0]);
                     console.log('十の位 停止 - 完了！');
                     
-                    // アニメーション完了後、オーバーレイと会社名を表示
                     setTimeout(() => {
                         showOverlayAndCompany(totalScore, currentClientName);
-                    }, 1300);
+                    }, stopTiming.bandReveal ?? 1300);
                 }, stopTiming.digit2);
             };
             
@@ -1860,9 +1940,18 @@
 
         // バン！と止める（強制的に目標の数字に移動）
         function snapToTarget(roller, targetDigit) {
+            const container = roller.closest('.digit-container');
             roller.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
             const digitSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--digit-size')) || 18;
             roller.style.transform = `translateY(-${targetDigit * digitSize}rem)`;
+            const onSnapEnd = (event) => {
+                if (event.target !== roller || event.propertyName !== 'transform') {
+                    return;
+                }
+                container?.classList.remove('is-rolling');
+                roller.removeEventListener('transitionend', onSnapEnd);
+            };
+            roller.addEventListener('transitionend', onSnapEnd);
         }
 
         // 色変更（無効化）

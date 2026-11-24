@@ -116,10 +116,22 @@
         socket.emit('update-digit-gap', { gap: value });
     }
 
+    function updateCompanyNameSize(value) {
+        document.getElementById('companyNameSizeValue').textContent = value;
+        localStorage.setItem('ranking_companyNameSize', value);
+        socket.emit('update-company-name-size', { size: value });
+    }
+
     function updateCompanyNamePosition(value) {
         document.getElementById('companyNamePositionValue').textContent = value;
         localStorage.setItem('ranking_companyNamePosition', value);
         socket.emit('update-company-name-position', { position: value });
+    }
+
+    function updateBottomBandPosition(value) {
+        document.getElementById('bottomBandOffsetValue').textContent = value;
+        localStorage.setItem('ranking_bottomBandOffset', value);
+        socket.emit('update-bottom-band-position', { offset: value });
     }
 
     function updateScorePosition() {
@@ -135,11 +147,15 @@
     function updateStopTiming() {
         const digit1 = parseFloat(document.getElementById('digit1StopTime').value) || 0;
         const digit2 = parseFloat(document.getElementById('digit2StopTime').value) || 2;
+        const bandReveal = parseFloat(document.getElementById('bandRevealDelay').value);
+        const bandRevealSec = Number.isFinite(bandReveal) ? bandReveal : 1.3;
         localStorage.setItem('ranking_digit1StopTime', digit1);
         localStorage.setItem('ranking_digit2StopTime', digit2);
+        localStorage.setItem('ranking_bandRevealDelay', bandRevealSec);
         socket.emit('update-stop-timing', {
             digit1: digit1 * 1000,
-            digit2: digit2 * 1000
+            digit2: digit2 * 1000,
+            bandReveal: bandRevealSec * 1000
         });
     }
 
@@ -202,9 +218,17 @@
         document.getElementById('digitGap').value = digitGap;
         document.getElementById('digitGapValue').textContent = digitGap;
 
+        const companyNameSize = localStorage.getItem('ranking_companyNameSize') || '5';
+        document.getElementById('companyNameSize').value = companyNameSize;
+        document.getElementById('companyNameSizeValue').textContent = companyNameSize;
+
         const companyNamePosition = localStorage.getItem('ranking_companyNamePosition') || '20';
         document.getElementById('companyNamePosition').value = companyNamePosition;
         document.getElementById('companyNamePositionValue').textContent = companyNamePosition;
+
+        const bottomBandOffset = localStorage.getItem('ranking_bottomBandOffset') ?? '-10';
+        document.getElementById('bottomBandOffset').value = bottomBandOffset;
+        document.getElementById('bottomBandOffsetValue').textContent = bottomBandOffset;
 
         const scoreTop = localStorage.getItem('ranking_scoreTop') || '50';
         const scoreLeft = localStorage.getItem('ranking_scoreLeft') || '50';
@@ -215,8 +239,10 @@
 
         const digit1StopTime = localStorage.getItem('ranking_digit1StopTime') || '11';
         const digit2StopTime = localStorage.getItem('ranking_digit2StopTime') || '13';
+        const bandRevealDelay = localStorage.getItem('ranking_bandRevealDelay') || '1.3';
         document.getElementById('digit1StopTime').value = digit1StopTime;
         document.getElementById('digit2StopTime').value = digit2StopTime;
+        document.getElementById('bandRevealDelay').value = bandRevealDelay;
 
         const perfectEffect = localStorage.getItem('ranking_perfectEffect') || 'none';
         document.getElementById('perfectEffect').value = perfectEffect;
@@ -266,9 +292,19 @@
         const digitGap = localStorage.getItem('ranking_digitGap');
         if (digitGap) socket.emit('update-digit-gap', { gap: digitGap });
 
+        const companyNameSize = localStorage.getItem('ranking_companyNameSize');
+        if (companyNameSize) {
+            socket.emit('update-company-name-size', { size: companyNameSize });
+        }
+
         const companyNamePosition = localStorage.getItem('ranking_companyNamePosition');
         if (companyNamePosition) {
             socket.emit('update-company-name-position', { position: companyNamePosition });
+        }
+
+        const bottomBandOffset = localStorage.getItem('ranking_bottomBandOffset');
+        if (bottomBandOffset !== null) {
+            socket.emit('update-bottom-band-position', { offset: bottomBandOffset });
         }
 
         const scoreTop = localStorage.getItem('ranking_scoreTop');
@@ -278,9 +314,11 @@
         const digit1StopTime = localStorage.getItem('ranking_digit1StopTime');
         const digit2StopTime = localStorage.getItem('ranking_digit2StopTime');
         if (digit1StopTime && digit2StopTime) {
+            const bandRevealDelay = localStorage.getItem('ranking_bandRevealDelay') || '1.3';
             socket.emit('update-stop-timing', {
                 digit1: parseFloat(digit1StopTime) * 1000,
-                digit2: parseFloat(digit2StopTime) * 1000
+                digit2: parseFloat(digit2StopTime) * 1000,
+                bandReveal: parseFloat(bandRevealDelay) * 1000
             });
         }
 
@@ -331,6 +369,37 @@
         if (savedFont) socket.emit('change-font', savedFont);
     }
 
+    function showLayoutSection(sectionId) {
+        const treeItems = document.querySelectorAll('.settings-layout-tree-item');
+        const sections = document.querySelectorAll('.settings-layout-section');
+        treeItems.forEach((item) => {
+            const active = item.dataset.layoutSection === sectionId;
+            item.classList.toggle('active', active);
+        });
+        sections.forEach((section) => {
+            const active = section.id === `layout-section-${sectionId}`;
+            section.classList.toggle('active', active);
+            section.hidden = !active;
+        });
+        localStorage.setItem('ranking_layoutSection', sectionId);
+    }
+
+    function initLayoutTree() {
+        const tree = document.querySelector('.settings-layout-tree');
+        if (!tree) {
+            return;
+        }
+        const saved = localStorage.getItem('ranking_layoutSection') || 'score';
+        showLayoutSection(saved);
+        tree.addEventListener('click', (event) => {
+            const item = event.target.closest('.settings-layout-tree-item');
+            if (!item) {
+                return;
+            }
+            showLayoutSection(item.dataset.layoutSection);
+        });
+    }
+
     function initSettingsNav() {
         const navItems = document.querySelectorAll('.settings-nav-item');
         const panels = document.querySelectorAll('.settings-panel');
@@ -350,7 +419,9 @@
     function bindControls() {
         window.updateDigitSize = updateDigitSize;
         window.updateDigitGap = updateDigitGap;
+        window.updateCompanyNameSize = updateCompanyNameSize;
         window.updateCompanyNamePosition = updateCompanyNamePosition;
+        window.updateBottomBandPosition = updateBottomBandPosition;
         window.updateScorePosition = updateScorePosition;
         window.updateStopTiming = updateStopTiming;
         window.updatePerfectEffect = updatePerfectEffect;
@@ -371,6 +442,7 @@
         bindControls();
         restoreRankingSettings();
         initSettingsNav();
+        initLayoutTree();
 
         socket.on('connect', () => {
             setTimeout(pushStoredSettingsToServer, 300);
