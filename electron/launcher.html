@@ -16,19 +16,41 @@
         </header>
 
         <div class="launcher-columns">
-            <section class="launcher-panel">
-                <h2>サーバー</h2>
-                <div class="launcher-status-row">
-                    <span id="statusDot" class="launcher-status-dot stopped"></span>
-                    <span id="statusText">サーバー停止中</span>
-                </div>
-                <button type="button" id="startServerBtn" class="btn btn-primary btn-full launcher-start-btn">
-                    サーバーを起動
-                </button>
-                <button type="button" id="stopServerBtn" class="btn btn-secondary btn-full" disabled hidden>
-                    サーバーを停止
-                </button>
-            </section>
+            <div class="launcher-column-stack">
+                <section class="launcher-panel">
+                    <h2>サーバー</h2>
+                    <div class="launcher-status-row">
+                        <span id="statusDot" class="launcher-status-dot stopped"></span>
+                        <span id="statusText">サーバー停止中</span>
+                    </div>
+                    <button type="button" id="startServerBtn" class="btn btn-primary btn-full launcher-start-btn">
+                        サーバーを起動
+                    </button>
+                    <button type="button" id="stopServerBtn" class="btn btn-secondary btn-full" disabled hidden>
+                        サーバーを停止
+                    </button>
+                </section>
+
+                <section class="launcher-panel launcher-update-section">
+                    <div class="launcher-update-header">
+                        <h2>アプリ更新</h2>
+                        <p id="launcherVersion" class="launcher-version-line">バージョン —</p>
+                    </div>
+                    <button type="button" id="checkUpdateBtn" class="btn btn-secondary btn-full">
+                        更新を確認
+                    </button>
+                    <p id="updateStatus" class="launcher-update-status"></p>
+                    <button type="button" id="installUpdateBtn" class="btn btn-success btn-full" hidden>
+                        更新をダウンロードして再起動
+                    </button>
+                    <div id="updateProgressWrap" class="launcher-update-progress-wrap" hidden>
+                        <div class="launcher-update-progress-track">
+                            <div id="updateProgressBar" class="launcher-update-progress-bar"></div>
+                        </div>
+                        <p id="updateProgressText" class="launcher-update-progress-text">0%</p>
+                    </div>
+                </section>
+            </div>
 
             <section class="launcher-panel" id="openSection">
                 <h2>ウィンドウを開く</h2>
@@ -46,26 +68,6 @@
                 <p class="launcher-note">点数画面＝得点発表（/ranking）。<strong>拡張デスクトップ時はサブディスプレイ</strong>（プライマリと離れた画面）に開きます。見た目の設定は親機の「設定…」から。</p>
             </section>
         </div>
-
-        <section class="launcher-update-section">
-            <div class="launcher-update-header">
-                <h2>アプリ更新</h2>
-                <p id="launcherVersion" class="launcher-version-line">バージョン —</p>
-            </div>
-            <button type="button" id="checkUpdateBtn" class="btn btn-secondary btn-full">
-                更新を確認
-            </button>
-            <p id="updateStatus" class="launcher-update-status"></p>
-            <button type="button" id="installUpdateBtn" class="btn btn-success btn-full" hidden>
-                更新をダウンロードして再起動
-            </button>
-            <div id="updateProgressWrap" class="launcher-update-progress-wrap" hidden>
-                <div class="launcher-update-progress-track">
-                    <div id="updateProgressBar" class="launcher-update-progress-bar"></div>
-                </div>
-                <p id="updateProgressText" class="launcher-update-progress-text">0%</p>
-            </div>
-        </section>
 
         <section id="addressSection" class="launcher-address-section">
             <h2>接続アドレス</h2>

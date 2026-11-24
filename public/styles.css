@@ -149,6 +149,15 @@ body {
     margin-bottom: 0;
 }
 
+.column-control .total-score-card {
+    margin-bottom: 4px;
+}
+
+.column-control .total-display {
+    font-size: 5.5rem;
+    padding: 6px 0;
+}
+
 /* コントロールカードのタイトルを小さく */
 .column-control .control-card h3 {
     font-size: 1.1rem;
@@ -841,18 +850,33 @@ body {
     font-size: 1.1rem;
 }
 
-.button-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+.button-group {
+    display: flex;
+    flex-direction: column;
     gap: 12px;
     width: 100%;
 }
 
+.button-row,
 .button-row-action {
     display: grid;
-    grid-template-columns: 1.5fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 12px;
     width: 100%;
+}
+
+.button-row .btn,
+.button-row-action .btn {
+    min-width: 0;
+    box-sizing: border-box;
+    font-size: 0.92rem;
+    padding: 14px 8px;
+    line-height: 1.3;
+    white-space: normal;
+}
+
+.button-row-action .btn.btn-go {
+    font-size: 1.05rem;
 }
 
 .btn-action {
@@ -1769,9 +1793,9 @@ body {
         width: 100%;
     }
 
+    .button-row,
     .button-row-action {
-        flex-direction: column;
-        gap: 10px;
+        grid-template-columns: 1fr;
     }
 
     .btn-action {

@@ -17,18 +17,26 @@
     </header>
 
     <main class="main-container">
-        <!-- カラム1: コントロールパネル -->
+        <!-- カラム1: 合計得点 + コントロール -->
         <div class="column column-control">
+            <div class="total-score-card">
+                <h2>合計得点</h2>
+                <div class="total-display" id="totalScore">0</div>
+                <p class="total-label">点</p>
+            </div>
+
             <!-- 得点発表 -->
             <div class="control-card">
                 <h3>得点発表</h3>
                 <div class="button-group">
-                    <button class="btn btn-primary btn-full" onclick="showRanking()">
-                        ウィンドウ表示
-                    </button>
-                    <button class="btn btn-primary btn-full" onclick="showRankingFullscreen()">
-                        フルスクリーン表示
-                    </button>
+                    <div class="button-row">
+                        <button class="btn btn-primary btn-full" onclick="showRanking()">
+                            ウィンドウ表示
+                        </button>
+                        <button class="btn btn-primary btn-full" onclick="showRankingFullscreen()">
+                            フルスクリーン表示
+                        </button>
+                    </div>
                     <div class="button-row-action">
                         <button class="btn btn-danger btn-action btn-go" onclick="triggerGo()">
                             得点GO!
@@ -54,12 +62,14 @@
                     <button class="btn btn-danger btn-full" onclick="resetAllRounds()">
                         全ラウンドリセット
                     </button>
-                    <button class="btn btn-primary btn-full" onclick="openSettings()">
-                        設定…
-                    </button>
-                    <button class="btn btn-primary btn-full" onclick="openScoresTable()">
-                        点数一覧（CSV）
-                    </button>
+                    <div class="button-row">
+                        <button class="btn btn-primary btn-full" onclick="openSettings()">
+                            設定…
+                        </button>
+                        <button class="btn btn-primary btn-full" onclick="openScoresTable()">
+                            点数一覧（CSV）
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -97,14 +107,8 @@
             </div>
         </div>
 
-        <!-- カラム3: 合計得点 -->
+        <!-- カラム3: セット・チーム -->
         <div class="column column-total">
-            <div class="total-score-card">
-                <h2>合計得点</h2>
-                <div class="total-display" id="totalScore">0</div>
-                <p class="total-label">点</p>
-            </div>
-            
             <div class="round-card">
                 <h3>セット選択</h3>
                 <div class="round-selector-buttons set-selector-buttons" id="setSelectorButtons"></div>

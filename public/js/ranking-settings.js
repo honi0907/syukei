@@ -116,6 +116,12 @@
         socket.emit('update-digit-gap', { gap: value });
     }
 
+    function updateRollFadeTop(value) {
+        document.getElementById('rollFadeTopValue').textContent = value;
+        localStorage.setItem('ranking_rollFadeTop', value);
+        socket.emit('update-roll-fade-top', { percent: value });
+    }
+
     function updateCompanyNameSize(value) {
         document.getElementById('companyNameSizeValue').textContent = value;
         localStorage.setItem('ranking_companyNameSize', value);
@@ -218,6 +224,10 @@
         document.getElementById('digitGap').value = digitGap;
         document.getElementById('digitGapValue').textContent = digitGap;
 
+        const rollFadeTop = localStorage.getItem('ranking_rollFadeTop') || '12';
+        document.getElementById('rollFadeTop').value = rollFadeTop;
+        document.getElementById('rollFadeTopValue').textContent = rollFadeTop;
+
         const companyNameSize = localStorage.getItem('ranking_companyNameSize') || '5';
         document.getElementById('companyNameSize').value = companyNameSize;
         document.getElementById('companyNameSizeValue').textContent = companyNameSize;
@@ -291,6 +301,9 @@
 
         const digitGap = localStorage.getItem('ranking_digitGap');
         if (digitGap) socket.emit('update-digit-gap', { gap: digitGap });
+
+        const rollFadeTop = localStorage.getItem('ranking_rollFadeTop');
+        if (rollFadeTop) socket.emit('update-roll-fade-top', { percent: rollFadeTop });
 
         const companyNameSize = localStorage.getItem('ranking_companyNameSize');
         if (companyNameSize) {
@@ -419,6 +432,7 @@
     function bindControls() {
         window.updateDigitSize = updateDigitSize;
         window.updateDigitGap = updateDigitGap;
+        window.updateRollFadeTop = updateRollFadeTop;
         window.updateCompanyNameSize = updateCompanyNameSize;
         window.updateCompanyNamePosition = updateCompanyNamePosition;
         window.updateBottomBandPosition = updateBottomBandPosition;

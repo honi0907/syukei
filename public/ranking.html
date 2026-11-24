@@ -278,15 +278,15 @@
             -webkit-mask-image: linear-gradient(
                 to bottom,
                 transparent 0%,
-                #000 12%,
-                #000 88%,
+                #000 var(--roll-fade-top, 12%),
+                #000 calc(100% - var(--roll-fade-bottom, 12%)),
                 transparent 100%
             );
             mask-image: linear-gradient(
                 to bottom,
                 transparent 0%,
-                #000 12%,
-                #000 88%,
+                #000 var(--roll-fade-top, 12%),
+                #000 calc(100% - var(--roll-fade-bottom, 12%)),
                 transparent 100%
             );
             -webkit-mask-size: 100% 100%;
@@ -1005,6 +1005,7 @@
         document.documentElement.style.setProperty('--company-name-position', '13%');
         document.documentElement.style.setProperty('--score-top', '61%');
         document.documentElement.style.setProperty('--score-left', '50%');
+        document.documentElement.style.setProperty('--roll-fade-top', '12%');
         
         // 停止タイミング設定（デフォルト値）
         let stopTiming = {
@@ -1065,6 +1066,11 @@
             const scoreLeft = localStorage.getItem('ranking_scoreLeft');
             if (scoreTop) document.documentElement.style.setProperty('--score-top', scoreTop + '%');
             if (scoreLeft) document.documentElement.style.setProperty('--score-left', scoreLeft + '%');
+
+            const rollFadeTop = localStorage.getItem('ranking_rollFadeTop');
+            if (rollFadeTop) {
+                document.documentElement.style.setProperty('--roll-fade-top', rollFadeTop + '%');
+            }
 
             const bottomBandOffset = localStorage.getItem('ranking_bottomBandOffset');
             if (bottomBandOffset !== null && bottomBandOffset !== '') {
@@ -1252,6 +1258,12 @@
             console.log('数字間隔変更受信:', data.gap);
             localStorage.setItem('ranking_digitGap', data.gap);
             document.documentElement.style.setProperty('--digit-gap', data.gap + 'px');
+        });
+
+        socket.on('roll-fade-top-changed', (data) => {
+            console.log('回転上端フェード変更受信:', data.percent);
+            localStorage.setItem('ranking_rollFadeTop', data.percent);
+            document.documentElement.style.setProperty('--roll-fade-top', data.percent + '%');
         });
         
         // 会社名位置変更を受信

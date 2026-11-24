@@ -45,6 +45,13 @@
     align-items: start;
 }
 
+.launcher-column-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+}
+
 .launcher-panel h2,
 .launcher-address-section > h2 {
     margin: 0 0 12px;
@@ -111,11 +118,7 @@
 }
 
 .launcher-update-section {
-    margin-top: 18px;
-    padding: 14px 16px;
-    border: 1px solid #e9ecef;
-    border-radius: 10px;
-    background: #f8f9fa;
+    margin-top: 0;
 }
 
 .launcher-update-header {

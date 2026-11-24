@@ -1749,6 +1749,11 @@ io.on('connection', (socket) => {
         console.log('数字間隔変更:', data.gap);
         io.emit('digit-gap-changed', { gap: data.gap });
     });
+
+    socket.on('update-roll-fade-top', (data) => {
+        console.log('回転上端フェード変更:', data.percent);
+        io.emit('roll-fade-top-changed', { percent: data.percent });
+    });
     
     socket.on('update-company-name-size', (data) => {
         console.log('チーム名サイズ変更:', data.size);

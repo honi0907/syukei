@@ -182,6 +182,13 @@
                                 <div class="settings-field-value"><span id="digitGapValue">15</span> px</div>
                             </div>
 
+                            <div class="settings-field">
+                                <label for="rollFadeTop">回転の上端（チーム名とのすき間）</label>
+                                <input type="range" id="rollFadeTop" min="0" max="40" value="12" step="1" oninput="updateRollFadeTop(this.value)">
+                                <div class="settings-field-value"><span id="rollFadeTopValue">12</span> %</div>
+                                <p class="settings-field-hint">大きいほど回転の境界が下がり、チーム名にかかりにくくなります。チーム名のサイズや位置を変えたあとも、ここだけで合わせられます。回転中に反映されます。</p>
+                            </div>
+
                             <div class="settings-field-row">
                                 <div class="settings-field">
                                     <label for="scoreTop">点数の縦位置</label>
