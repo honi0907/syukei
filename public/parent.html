@@ -485,7 +485,8 @@
             }
             wrap.innerHTML = SET_INDEX_LABELS.map((label, index) => {
                 const setNum = index + 1;
-                return `<button type="button" class="btn btn-set" data-set="${setNum}" onclick="switchSet(${setNum})" title="${escapeSetLabel(setNames[index] || label)}">${escapeSetLabel(label)}</button>`;
+                const display = setNames[index] || label;
+                return `<button type="button" class="btn btn-set" data-set="${setNum}" onclick="switchSet(${setNum})" title="${escapeSetLabel(display)}">${escapeSetLabel(display)}</button>`;
             }).join('');
             syncSetButtonActive();
         }
