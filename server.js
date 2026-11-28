@@ -44,17 +44,30 @@ const {
 const TEAM_COUNT = SETS_TEAM_COUNT;
 const CLIENT_ID_COUNT = 10;
 
-const TEAM_NAME_PATH_FILE = path.join(__dirname, 'teamname-path.txt');
+/** インストール版は Program Files に書けないため、設定の保存先を分ける */
+const DATA_DIR = process.env.SYUKEI_DATA_DIR
+    ? path.resolve(process.env.SYUKEI_DATA_DIR)
+    : __dirname;
+
+function ensureDataDir() {
+    if (DATA_DIR !== __dirname) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+}
+
+ensureDataDir();
+
+const TEAM_NAME_PATH_FILE = path.join(DATA_DIR, 'teamname-path.txt');
 const DEFAULT_TEAM_NAME_FILE = path.join(__dirname, 'teamname.txt');
-const TEAM_SET_STARTLINES_FILE = path.join(__dirname, 'team-set-startlines.txt');
+const TEAM_SET_STARTLINES_FILE = path.join(DATA_DIR, 'team-set-startlines.txt');
 
-const SET_NAME_PATH_FILE = path.join(__dirname, 'setname-path.txt');
+const SET_NAME_PATH_FILE = path.join(DATA_DIR, 'setname-path.txt');
 const DEFAULT_SET_NAME_FILE = path.join(__dirname, 'setname.txt');
-const SET_NAME_START_FILE = path.join(__dirname, 'setname-startline.txt');
+const SET_NAME_START_FILE = path.join(DATA_DIR, 'setname-startline.txt');
 
-const CLIENT_NAME_PATH_FILE = path.join(__dirname, 'clientname-path.txt');
+const CLIENT_NAME_PATH_FILE = path.join(DATA_DIR, 'clientname-path.txt');
 const DEFAULT_CLIENT_NAME_FILE = path.join(__dirname, 'clientname.txt');
-const CLIENT_NAME_START_FILE = path.join(__dirname, 'clientname-startline.txt');
+const CLIENT_NAME_START_FILE = path.join(DATA_DIR, 'clientname-startline.txt');
 
 /** @type {string[]} 現在セットの5チーム名 */
 let teamNames = defaultTeamNames();

@@ -1,6 +1,6 @@
 {
   "name": "syukei-system",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "親機・子機スコア集計システム",
   "main": "electron/main.js",
   "repository": {
