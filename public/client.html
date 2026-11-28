@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>子機 - 点数入力</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=numpad-ten-2">
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/server-host.js"></script>
     <script>
@@ -99,7 +99,9 @@
                     <button type="button" class="num-btn" data-number="8" onclick="addNumber(8)">8</button>
                     <button type="button" class="num-btn" data-number="9" onclick="addNumber(9)">9</button>
                     <button type="button" class="num-btn clear" onclick="clearScore()">クリア</button>
-                    <button type="button" class="num-btn num-btn-ten" id="tenBtn" onclick="setScoreTen()">10</button>
+                    <button type="button" class="num-btn num-btn-ten" id="tenBtn" onclick="setScoreTen()" aria-label="10点">
+                        <span class="num-btn-digits"><span>1</span><span>0</span></span>
+                    </button>
                     <button type="button" class="num-btn submit" onclick="submitScore()">決定</button>
                 </div>
             </div>

@@ -1385,9 +1385,10 @@ body {
 
 /* ボタングリッド */
 .numpad {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+  --numpad-digit-font-size: 2.5rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 
 .num-btn {
@@ -1399,7 +1400,7 @@ body {
     --btn-text: #212529;
 
     aspect-ratio: 1 / 1;
-    font-size: 2.5rem;
+    font-size: var(--numpad-digit-font-size);
     font-weight: 600;
     border: 1px solid var(--btn-rim);
     border-radius: 8px;
@@ -1450,8 +1451,23 @@ body {
 }
 
 .num-btn.num-btn-ten {
-    font-size: 2rem;
-    font-weight: 700;
+    font-size: var(--numpad-digit-font-size);
+    padding-inline: 0.1em;
+}
+
+.num-btn-digits {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.06em;
+    line-height: 1;
+    font-weight: 600;
+}
+
+.num-btn-digits > span {
+    font-size: 1em;
+    min-width: 0.55em;
+    text-align: center;
 }
 
 .num-btn:disabled {
@@ -1735,13 +1751,13 @@ body {
 
     /* テンキー調整 */
     .numpad {
+        --numpad-digit-font-size: 1.5rem;
         gap: 8px;
         padding: 15px;
     }
 
     .num-btn {
         height: 60px;
-        font-size: 1.5rem;
     }
 
     .num-btn-wide {
@@ -1840,9 +1856,12 @@ body {
     }
 
     /* テンキーをさらに大きく */
+    .numpad {
+        --numpad-digit-font-size: 1.8rem;
+    }
+
     .num-btn {
         height: 70px;
-        font-size: 1.8rem;
     }
 
     .num-btn-wide {
@@ -1917,9 +1936,12 @@ body {
         order: -1;
     }
 
+    .numpad {
+        --numpad-digit-font-size: 1.3rem;
+    }
+
     .num-btn {
         height: 50px;
-        font-size: 1.3rem;
     }
 
     .input-display {
@@ -2458,11 +2480,15 @@ body {
 /* ==================== 観覧用ビューワ（全セット・Excel風） ==================== */
 .viewer-excel-page {
     margin: 0;
+    height: 100vh;
     min-height: 100vh;
     background: #d4d4d4;
-    padding: 16px 12px 32px;
+    padding: 6px 8px 8px;
     box-sizing: border-box;
     font-family: 'Segoe UI', 'Meiryo', system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .viewer-excel-header {
@@ -2476,6 +2502,31 @@ body {
     gap: 12px;
 }
 
+.viewer-excel-header-compact {
+    flex-shrink: 0;
+    margin-bottom: 6px;
+    align-items: center;
+    gap: 8px;
+}
+
+.viewer-excel-header-main {
+    min-width: 0;
+}
+
+.viewer-excel-header-compact h1 {
+    margin: 0;
+    font-size: 1.12rem;
+    line-height: 1.25;
+    color: #212529;
+}
+
+.viewer-excel-header-compact .viewer-excel-meta {
+    margin: 2px 0 0;
+    padding: 0;
+    font-size: 0.76rem;
+    line-height: 1.3;
+}
+
 .viewer-excel-header h1 {
     margin: 0 0 4px;
     font-size: 1.5rem;
@@ -2483,9 +2534,15 @@ body {
 }
 
 .viewer-excel-lead {
+    margin: 4px 0 0;
+    color: #6c757d;
+    font-size: 0.78rem;
+}
+
+.viewer-excel-header .btn-viewer-toolbar {
+    padding: 7px 14px;
     margin: 0;
-    color: #495057;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 .viewer-excel-actions {
@@ -2498,10 +2555,10 @@ body {
 .viewer-excel-live {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.85rem;
+    gap: 5px;
+    font-size: 0.78rem;
     color: #2d6a4f;
-    padding: 6px 10px;
+    padding: 4px 8px;
     background: #fff;
     border-radius: 999px;
     border: 1px solid #b7e4c7;
@@ -2530,9 +2587,10 @@ body {
 .viewer-focus-bar {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin: 0 0 12px;
-    padding: 0 4px;
+    gap: 6px;
+    margin: 0 0 8px;
+    padding: 0 2px;
+    flex-shrink: 0;
 }
 
 .viewer-focus-btn {
@@ -2540,8 +2598,8 @@ body {
     background: #fff;
     color: #212529;
     border-radius: 999px;
-    padding: 7px 14px;
-    font-size: 0.92rem;
+    padding: 4px 10px;
+    font-size: 0.8rem;
     cursor: pointer;
 }
 
@@ -2589,6 +2647,27 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-height: 0;
+}
+
+.viewer-excel-stack-overview {
+    flex: 1 1 auto;
+    gap: 8px;
+    overflow: hidden;
+}
+
+.viewer-excel-stack-focused {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.viewer-excel-band-row .viewer-excel-band-title {
+    display: none;
+}
+
+.viewer-excel-band-split {
+    margin-top: 0;
 }
 
 .viewer-excel-band-title {
@@ -2616,6 +2695,35 @@ body {
 
 .viewer-excel-wrap-unified {
     max-height: calc(100vh - 120px);
+}
+
+.viewer-excel-wrap-row {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+    overflow: auto;
+}
+
+.viewer-excel-stack-overview .viewer-excel-band-row {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.viewer-excel-stack-overview .viewer-excel-wrap-row,
+.viewer-excel-stack-focused .viewer-excel-wrap-focus {
+    width: 100%;
+}
+
+.viewer-excel-stack-overview .viewer-excel-wrap-row {
+    height: 100%;
+}
+
+.viewer-excel-stack-focused .viewer-excel-wrap-focus {
+    height: 100%;
+    max-height: none;
+    overflow: auto;
 }
 
 .viewer-band-title-row .viewer-band-title {
@@ -2731,6 +2839,572 @@ body {
     vertical-align: middle;
 }
 
+.viewer-matrix-stacked .viewer-set-gap {
+    border-left: 3px solid #868e96 !important;
+    box-shadow: -1px 0 0 #fff inset;
+}
+
+.viewer-matrix-stacked .viewer-set-team-hdr,
+.viewer-matrix-stacked .team-row-label {
+    background: #f8f9fa;
+    text-align: left;
+    font-weight: 600;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.25;
+    font-size: 0.72rem;
+    min-width: 4.25rem;
+    max-width: 6.75rem;
+}
+
+.viewer-matrix-stacked .viewer-set-team-hdr {
+    text-align: center;
+    background: #e9ecef;
+    font-size: 0.78rem;
+    max-width: none;
+}
+
+.viewer-matrix-stacked .viewer-id-col {
+    font-size: 0.7rem;
+    font-weight: 600;
+    min-width: 2.75rem;
+    max-width: 4.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.viewer-matrix-stacked .viewer-col-total-hdr {
+    background: #dee2e6;
+    font-size: 0.75rem;
+    min-width: 2.75rem;
+}
+
+.viewer-matrix-stacked col.viewer-col-team-label {
+    width: 5.5rem;
+}
+
+.viewer-matrix-stacked col.viewer-col-id {
+    width: 3.25rem;
+}
+
+.viewer-matrix-stacked col.viewer-col-total {
+    width: 3rem;
+}
+
+.viewer-matrix-stacked .head-set-row th {
+    top: 0;
+    z-index: 6;
+}
+
+.viewer-matrix-stacked .head-id-row th {
+    top: 2.35rem;
+    z-index: 5;
+}
+
+.viewer-excel-page.is-focused .viewer-matrix-stacked .head-id-row th {
+    top: 3.1rem;
+}
+
+.viewer-excel-page.is-focused .viewer-matrix-stacked .team-row-label,
+.viewer-excel-page.is-focused .viewer-matrix-stacked .viewer-set-team-hdr {
+    font-size: 1rem;
+    max-width: 12rem;
+}
+
+.viewer-excel-page.is-focused .viewer-matrix-stacked .viewer-id-col {
+    font-size: 1rem;
+}
+
+.viewer-matrix-stacked--triple {
+    width: 100%;
+    font-size: 1.02rem;
+}
+
+.viewer-matrix-stacked--triple .head-set-row th {
+    font-size: 1rem;
+    padding: 10px 8px;
+}
+
+.viewer-matrix-stacked--triple .head-id-row th {
+    font-size: 0.88rem;
+    padding: 8px 6px;
+}
+
+.viewer-matrix-stacked--triple .viewer-set-team-hdr,
+.viewer-matrix-stacked--triple .team-row-label {
+    font-size: 0.86rem;
+    min-width: 5rem;
+    max-width: 9.5rem;
+}
+
+.viewer-matrix-stacked--triple .viewer-id-col {
+    font-size: 0.84rem;
+    min-width: 3.25rem;
+    max-width: 5.5rem;
+}
+
+.viewer-matrix-stacked--triple td.num {
+    padding: 9px 10px;
+    min-width: 3.25rem;
+    font-size: 1.05rem;
+}
+
+.viewer-matrix-stacked--triple col.viewer-col-team-label {
+    width: 7.5rem;
+}
+
+.viewer-matrix-stacked--triple col.viewer-col-id {
+    width: 4.25rem;
+}
+
+.viewer-matrix-stacked--triple col.viewer-col-total {
+    width: 3.75rem;
+}
+
+.viewer-matrix-stacked--triple .head-id-row th {
+    top: 2.6rem;
+}
+
+.viewer-excel-stack .viewer-excel-wrap {
+    display: flex;
+    justify-content: safe center;
+    align-items: flex-start;
+}
+
+.viewer-set-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    width: max-content;
+    max-width: 100%;
+}
+
+.viewer-excel-stack .viewer-matrix-stacked,
+.viewer-excel-stack .viewer-matrix-stacked--triple,
+.viewer-excel-stack .viewer-matrix-stacked--focus {
+    width: max-content;
+    min-width: 0;
+    margin: 0;
+    border: 3px solid #212529;
+}
+
+.viewer-matrix-stacked thead th {
+    position: static;
+}
+
+.viewer-matrix-stacked .head-set-row > th {
+    border-top: 3px solid #212529 !important;
+    border-left: 3px solid #212529 !important;
+    border-right: 3px solid #212529 !important;
+}
+
+.viewer-matrix-stacked .viewer-set-team-hdr,
+.viewer-matrix-stacked tbody .team-row-label {
+    border-left: 3px solid #212529 !important;
+}
+
+.viewer-matrix-stacked .viewer-col-total-hdr,
+.viewer-matrix-stacked td.subtotal-col {
+    border-right: 3px solid #212529 !important;
+}
+
+.viewer-matrix-stacked tbody tr:last-child > th,
+.viewer-matrix-stacked tbody tr:last-child > td {
+    border-bottom: 3px solid #212529 !important;
+}
+
+.viewer-excel-stack .viewer-matrix-stacked col.viewer-col-team-label,
+.viewer-excel-stack .viewer-matrix-stacked--triple col.viewer-col-team-label,
+.viewer-excel-stack .viewer-matrix-stacked--focus col.viewer-col-team-label {
+    width: var(--viewer-team-col, 8.5rem);
+}
+
+.viewer-excel-stack .viewer-matrix-stacked col.viewer-col-id,
+.viewer-excel-stack .viewer-matrix-stacked--triple col.viewer-col-id,
+.viewer-excel-stack .viewer-matrix-stacked--focus col.viewer-col-id {
+    width: var(--viewer-id-col, 4.25rem);
+}
+
+.viewer-excel-stack .viewer-matrix-stacked col.viewer-col-total,
+.viewer-excel-stack .viewer-matrix-stacked--triple col.viewer-col-total,
+.viewer-excel-stack .viewer-matrix-stacked--focus col.viewer-col-total {
+    width: var(--viewer-score-col, 4.25rem);
+}
+
+.viewer-excel-stack .viewer-id-col,
+.viewer-phone-sheet--matrix .viewer-id-col {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+}
+
+.viewer-excel-stack .team-row-label,
+.viewer-excel-stack .viewer-matrix-stacked--triple .team-row-label,
+.viewer-excel-stack .viewer-matrix-stacked--focus .team-row-label {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: keep-all;
+    max-width: none;
+}
+
+.viewer-matrix-stacked--focus {
+    width: 100%;
+    font-size: 1.28rem;
+}
+
+.viewer-matrix-stacked--focus .head-set-row th {
+    font-size: 1.35rem;
+    padding: 14px 10px;
+}
+
+.viewer-matrix-stacked--focus td.num {
+    padding: 12px 14px;
+    font-size: 1.3rem;
+}
+
+.viewer-matrix-stacked--focus .team-row-label,
+.viewer-matrix-stacked--focus .viewer-set-team-hdr {
+    font-size: 1.05rem;
+    max-width: 14rem;
+}
+
+.viewer-matrix-stacked--focus .viewer-id-col {
+    font-size: 1rem;
+}
+
+.viewer-share-dialog {
+    border: none;
+    border-radius: 12px;
+    padding: 0;
+    max-width: min(420px, calc(100vw - 24px));
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+}
+
+.viewer-share-dialog::backdrop {
+    background: rgba(33, 37, 41, 0.45);
+}
+
+.viewer-share-form {
+    margin: 0;
+    padding: 16px 18px 18px;
+}
+
+.viewer-share-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.viewer-share-header h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.viewer-share-close {
+    border: none;
+    background: #e9ecef;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    color: #495057;
+}
+
+.viewer-share-hint {
+    margin: 0 0 12px;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: #6c757d;
+}
+
+.viewer-share-field {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.viewer-share-scope-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.viewer-share-scope-btn {
+    border: 1px solid #868e96;
+    background: #fff;
+    color: #212529;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.78rem;
+    line-height: 1.25;
+    cursor: pointer;
+    max-width: 100%;
+    text-align: center;
+}
+
+.viewer-share-scope-btn.is-active {
+    background: #343a40;
+    color: #fff;
+    border-color: #343a40;
+}
+
+.viewer-share-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.viewer-share-status {
+    margin: 0 0 8px;
+    font-size: 0.8rem;
+    color: #495057;
+    min-height: 1.2em;
+}
+
+.viewer-share-progress {
+    margin: 0 0 8px;
+}
+
+.viewer-share-progress-track {
+    height: 8px;
+    border-radius: 999px;
+    background: #e9ecef;
+    overflow: hidden;
+}
+
+.viewer-share-progress-fill {
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: #1c7ed6;
+    transition: width 0.18s linear;
+}
+
+.viewer-share-progress-label {
+    margin: 6px 0 0;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #212529;
+    font-variant-numeric: tabular-nums;
+}
+
+.viewer-share-qr {
+    text-align: center;
+    padding: 8px 0 4px;
+}
+
+.viewer-share-qr img {
+    display: block;
+    margin: 0 auto 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.viewer-share-url {
+    margin: 0;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    word-break: break-all;
+    color: #6c757d;
+}
+
+.viewer-phone-sheet {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: -1;
+    width: 420px;
+    box-sizing: border-box;
+    padding: 16px 14px 20px;
+    background: #f1f3f5;
+    color: #212529;
+    font-family: 'Segoe UI', 'Meiryo', system-ui, sans-serif;
+    pointer-events: none;
+}
+
+.viewer-phone-sheet--matrix {
+    width: auto;
+    min-width: 380px;
+    max-width: none;
+    height: auto;
+    padding: 12px 10px 14px;
+    overflow: visible;
+}
+
+.viewer-phone-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: auto;
+    overflow: visible;
+}
+
+.viewer-phone-sheet--matrix .viewer-phone-band,
+.viewer-phone-sheet--matrix .viewer-excel-band {
+    flex: none;
+    display: block;
+    height: auto;
+    min-height: 0;
+    margin: 0;
+    overflow: visible;
+}
+
+.viewer-phone-sheet--matrix .viewer-phone-band-split {
+    margin-top: 0;
+}
+
+.viewer-phone-sheet--matrix .viewer-excel-wrap,
+.viewer-phone-sheet--matrix .viewer-excel-wrap-unified,
+.viewer-phone-sheet--matrix .viewer-phone-wrap {
+    flex: none;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+}
+
+.viewer-phone-sheet--matrix .viewer-matrix-stacked,
+.viewer-phone-sheet--matrix .viewer-matrix-stacked--triple,
+.viewer-phone-sheet--matrix .viewer-matrix-stacked--focus {
+    table-layout: fixed;
+    width: max-content;
+    min-width: 0;
+}
+
+.viewer-phone-sheet--matrix .head-set-row th,
+.viewer-phone-sheet--matrix .head-id-row th {
+    position: static;
+}
+
+.viewer-phone-sheet--matrix .head-set-row th {
+    background: #343a40;
+    color: #fff;
+}
+
+.viewer-phone-sheet--matrix .team-row-label,
+.viewer-phone-sheet--matrix .viewer-matrix-stacked--triple .team-row-label,
+.viewer-phone-sheet--matrix .head-set-row th,
+.viewer-phone-sheet--matrix .head-id-row th,
+.viewer-phone-sheet--matrix td.num {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: keep-all;
+    max-width: none;
+}
+
+.viewer-phone-sheet--matrix col.viewer-col-team-label {
+    width: var(--viewer-team-col, 8rem);
+}
+
+.viewer-phone-sheet--matrix col.viewer-col-id {
+    width: var(--viewer-id-col, 4.25rem);
+}
+
+.viewer-phone-sheet--matrix col.viewer-col-total {
+    width: var(--viewer-score-col, 4.25rem);
+}
+
+.viewer-phone-sheet[hidden] {
+    display: none !important;
+}
+
+.viewer-phone-sheet .phone-set {
+    background: #fff;
+    border-radius: 14px;
+    overflow: hidden;
+    margin: 0 0 14px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.viewer-phone-sheet .phone-set:last-child {
+    margin-bottom: 0;
+}
+
+.viewer-phone-sheet .phone-set h3 {
+    margin: 0;
+    padding: 12px 14px;
+    background: #343a40;
+    color: #fff;
+    font-size: 16px;
+    line-height: 1.35;
+    text-align: center;
+}
+
+.viewer-phone-sheet .phone-set.is-current h3 {
+    background: #f08c00;
+    color: #212529;
+}
+
+.viewer-phone-sheet .phone-team {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 11px 14px;
+    border-top: 1px solid #e9ecef;
+}
+
+.viewer-phone-sheet .phone-team.is-selected {
+    background: #e7f5ff;
+    box-shadow: inset 4px 0 0 #1c7ed6;
+}
+
+.viewer-phone-sheet .phone-set.is-current .phone-team {
+    background: #fff9db;
+}
+
+.viewer-phone-sheet .phone-set.is-current .phone-team.is-selected {
+    background: #d0ebff;
+}
+
+.viewer-phone-sheet .phone-team-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.viewer-phone-sheet .phone-scores {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+}
+
+.viewer-phone-sheet .phone-score {
+    min-width: 52px;
+    text-align: right;
+}
+
+.viewer-phone-sheet .phone-score span {
+    display: block;
+    font-size: 11px;
+    color: #868e96;
+    font-weight: 600;
+}
+
+.viewer-phone-sheet .phone-score strong {
+    display: block;
+    font-size: 22px;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.viewer-phone-sheet .phone-score.is-total strong {
+    color: #343a40;
+}
+
 .excel-matrix .head-set-row th {
     background: #495057;
     color: #fff;
@@ -2785,18 +3459,38 @@ body {
     color: #212529;
 }
 
-.excel-matrix thead .head-team-row th.team-selected {
+.excel-matrix thead .head-team-row th.team-selected,
+.excel-matrix thead .team-row-label.team-selected {
     background: #1c7ed6;
     color: #fff;
     font-weight: 700;
 }
 
+.excel-matrix th.team-selected,
 .excel-matrix td.team-selected {
-    box-shadow: inset 3px 0 0 #1c7ed6, inset -3px 0 0 #1c7ed6;
+    background: #a5d8ff;
+    box-shadow: none;
+    color: #212529;
+}
+
+.excel-matrix th.team-row-label.team-selected {
+    background: #1c7ed6;
+    color: #fff;
 }
 
 .excel-matrix tbody tr:nth-child(even) td:not(.set-group-current):not(.subtotal-col):not(.grand-col) {
     background: #fafafa;
+}
+
+.excel-matrix tbody th.team-selected,
+.excel-matrix tbody td.team-selected,
+.excel-matrix tfoot td.team-selected {
+    background: #a5d8ff;
+}
+
+.excel-matrix tbody th.team-row-label.team-selected {
+    background: #1c7ed6;
+    color: #fff;
 }
 
 .excel-matrix tbody tr:hover td {

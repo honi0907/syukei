@@ -4,7 +4,10 @@ const socketIo = require('socket.io');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const crypto = require('crypto');
+const https = require('https');
 const ExcelJS = require('exceljs');
+const QRCode = require('qrcode');
 
 const app = express();
 const server = http.createServer(app);
@@ -380,8 +383,187 @@ loadTeamNamesFromDisk();
 loadSetNamesFromDisk();
 loadClientNamesFromDisk();
 
-// 静的ファイル配信
 app.use(express.json({ limit: '256kb' }));
+
+const VIEWER_SHARE_TTL_MS = 2 * 60 * 60 * 1000;
+/** @type {Map<string, { buffer: Buffer, createdAt: number, scope: string, label: string }>} */
+const viewerShares = new Map();
+
+function pruneViewerShares() {
+    const now = Date.now();
+    for (const [id, entry] of viewerShares) {
+        if (now - entry.createdAt > VIEWER_SHARE_TTL_MS) {
+            viewerShares.delete(id);
+        }
+    }
+}
+
+function postMultipartPng(targetUrl, fields, fileField, buffer) {
+    const boundary = `----syukei${crypto.randomBytes(8).toString('hex')}`;
+    const head = Object.entries(fields).map(([key, value]) =>
+        `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`
+    ).join('');
+    const fileHead =
+        `--${boundary}\r\nContent-Disposition: form-data; name="${fileField}"; filename="syukei.png"\r\nContent-Type: image/png\r\n\r\n`;
+    const tail = `\r\n--${boundary}--\r\n`;
+    const body = Buffer.concat([
+        Buffer.from(head + fileHead),
+        buffer,
+        Buffer.from(tail)
+    ]);
+    const url = new URL(targetUrl);
+
+    return new Promise((resolve, reject) => {
+        const req = https.request({
+            method: 'POST',
+            hostname: url.hostname,
+            path: `${url.pathname}${url.search}`,
+            headers: {
+                'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                'Content-Length': body.length,
+                'User-Agent': 'syukei-share/1.1'
+            },
+            timeout: 20000
+        }, (res) => {
+            const chunks = [];
+            res.on('data', (chunk) => chunks.push(chunk));
+            res.on('end', () => {
+                const text = Buffer.concat(chunks).toString('utf8').trim();
+                const link = (text.match(/https:\/\/\S+/) || [])[0];
+                if (link) {
+                    resolve(link.replace(/["']$/, ''));
+                    return;
+                }
+                reject(new Error(`${url.hostname} ${res.statusCode}: ${text.slice(0, 120) || 'empty'}`));
+            });
+        });
+        req.on('timeout', () => {
+            req.destroy(new Error(`${url.hostname} timeout`));
+        });
+        req.on('error', reject);
+        req.end(body);
+    });
+}
+
+async function uploadAnonymousPng(buffer) {
+    const errors = [];
+    const attempts = [
+        () => postMultipartPng(
+            'https://litterbox.catbox.moe/resources/internals/api.php',
+            { reqtype: 'fileupload', time: '24h' },
+            'fileToUpload',
+            buffer
+        ),
+        () => postMultipartPng(
+            'https://catbox.moe/user/api.php',
+            { reqtype: 'fileupload' },
+            'fileToUpload',
+            buffer
+        )
+    ];
+    for (const attempt of attempts) {
+        try {
+            return await attempt();
+        } catch (error) {
+            errors.push(error instanceof Error ? error.message : String(error));
+        }
+    }
+    throw new Error(`公開用URLの作成に失敗しました。（${errors.join(' / ')}）`);
+}
+
+function resolveShareHost(req) {
+    const lanIp = getLocalIPAddress();
+    const requestHost = req.get('host') || '';
+    const requestIp = requestHost.split(':')[0] || '';
+    if (lanIp && lanIp !== 'localhost' && !lanIp.startsWith('127.')) {
+        return lanIp;
+    }
+    if (requestIp && requestIp !== 'localhost' && !requestIp.startsWith('127.')) {
+        return requestIp;
+    }
+    return lanIp || requestIp || null;
+}
+
+app.get('/api/server-info', (req, res) => {
+    const lanIp = getLocalIPAddress();
+    const shareHost = resolveShareHost(req);
+    res.json({
+        port: PORT,
+        lanIp: lanIp || null,
+        shareHost,
+        requestHost: req.get('host') || null,
+        shareReady: Boolean(shareHost && shareHost !== 'localhost' && !shareHost.startsWith('127.'))
+    });
+});
+
+app.post(
+    '/api/viewer-share',
+    express.raw({ type: ['image/png', 'application/octet-stream'], limit: '12mb' }),
+    async (req, res) => {
+        try {
+            if (!req.body || !(req.body instanceof Buffer) || req.body.length === 0) {
+                res.status(400).json({ ok: false, error: 'PNGデータがありません' });
+                return;
+            }
+            const publicUrl = await uploadAnonymousPng(req.body);
+            const dataUrl = await QRCode.toDataURL(publicUrl, {
+                width: 220,
+                margin: 2,
+                errorCorrectionLevel: 'M'
+            });
+            res.json({
+                ok: true,
+                publicUrl,
+                dataUrl,
+                expiresHours: 24
+            });
+        } catch (error) {
+            console.error('viewer-share upload:', error);
+            res.status(502).json({
+                ok: false,
+                error: error instanceof Error ? error.message : '公開用URLの作成に失敗しました'
+            });
+        }
+    }
+);
+
+app.get('/api/viewer-share/:id', (req, res) => {
+    const id = String(req.params.id).replace(/\.png$/i, '');
+    const entry = viewerShares.get(id);
+    if (!entry) {
+        res.status(404).type('text/plain; charset=utf-8').send('共有画像の有効期限が切れたか、見つかりません。');
+        return;
+    }
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', 'inline; filename="syukei-share.png"');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(entry.buffer);
+});
+
+app.get('/viewer-share/:id', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'viewer-share.html'));
+});
+
+app.post('/api/viewer-share-qr', async (req, res) => {
+    try {
+        const url = String(req.body?.url || '').trim().slice(0, 2048);
+        if (!url) {
+            res.status(400).json({ ok: false, error: 'URLがありません' });
+            return;
+        }
+        const dataUrl = await QRCode.toDataURL(url, {
+            width: 220,
+            margin: 2,
+            errorCorrectionLevel: 'M'
+        });
+        res.json({ ok: true, dataUrl });
+    } catch (error) {
+        console.error('viewer-share-qr:', error);
+        res.status(500).json({ ok: false, error: 'QRコードの作成に失敗しました' });
+    }
+});
+
+// 静的ファイル配信
 app.use(express.static(path.join(__dirname, 'public')));
 
 // データ管理
@@ -667,19 +849,98 @@ function formatScoresMatrixCsv(matrix) {
     return `\uFEFF${lines.join('\r\n')}`;
 }
 
-const VIEWER_EXPORT_BANDS = [
-    { title: 'セット１〜２', indices: [0, 1] },
-    { title: 'セット３〜４', indices: [2, 3] },
-    { title: 'セット５〜６', indices: [4, 5] }
+const VIEWER_EXPORT_SET_ROWS = [
+    [0, 1, 2],
+    [3, 4, 5]
 ];
 
-function viewerNameLabel(participant) {
-    const display = (participant.displayName || '').trim();
-    const id = participant.id || '';
-    if (display && display !== id) {
-        return `${id} ${display}`;
+function excelTeamLabel(name, index) {
+    const raw = String(name || '').replace(/チーム/g, '').trim();
+    if (raw) {
+        return raw;
     }
-    return display || id;
+    return ['A', 'B', 'C', 'D', 'E', 'F'][index] || String(index + 1);
+}
+
+function excelTextWidthUnits(text) {
+    let units = 0;
+    for (const ch of String(text || '')) {
+        units += ch.codePointAt(0) > 0xff ? 2.2 : 1.15;
+    }
+    return units;
+}
+
+function excelTeamColumnWidth(matrix) {
+    let maxUnits = 10;
+    matrix.sets.forEach((setBlock) => {
+        setBlock.teamNames.forEach((name, teamIdx) => {
+            maxUnits = Math.max(maxUnits, excelTextWidthUnits(excelTeamLabel(name, teamIdx)));
+        });
+    });
+    return Math.ceil(maxUnits) + 3;
+}
+
+function excelMergedHeaderWidth(colsPerSet, scoreColWidth, teamColWidth) {
+    return teamColWidth + Math.max(0, colsPerSet - 1) * scoreColWidth;
+}
+
+function estimateExcelWrapLines(text, columnWidth) {
+    const value = String(text || '').trim();
+    if (!value) {
+        return 1;
+    }
+    const charsPerLine = Math.max(5, columnWidth * 1.05);
+    return value
+        .split(/\r?\n/)
+        .reduce((sum, segment) => sum + Math.max(1, Math.ceil(segment.length / charsPerLine)), 0);
+}
+
+function excelRowHeightForLines(lines, { min = 22, max = 132, perLine = 15, pad = 6 } = {}) {
+    const safeLines = Math.max(1, lines);
+    return Math.min(max, Math.max(min, safeLines * perLine + pad));
+}
+
+function applyExcelTeamColumnWidths(ws, colsPerSet, sheetCols, teamColWidth, scoreColWidth) {
+    for (let teamCol = 1; teamCol <= sheetCols; teamCol += colsPerSet) {
+        ws.getColumn(teamCol).width = teamColWidth;
+        for (let offset = 1; offset < colsPerSet; offset += 1) {
+            const scoreCol = teamCol + offset;
+            if (scoreCol <= sheetCols) {
+                ws.getColumn(scoreCol).width = scoreColWidth;
+            }
+        }
+    }
+}
+
+function excelClientHeader(participant) {
+    const display = String(participant.displayName || '').trim();
+    return display || participant.id || '';
+}
+
+function excelIdColumnWidth(matrix) {
+    let maxUnits = excelTextWidthUnits('100');
+    matrix.participants.forEach((participant) => {
+        maxUnits = Math.max(maxUnits, excelTextWidthUnits(excelClientHeader(participant)));
+    });
+    return Math.min(40, Math.ceil(maxUnits) + 2);
+}
+
+function applyExcelColumnWidths(ws, colsPerSet, sheetCols, teamColWidth, idColWidth, totalColWidth, partCount, showTotal) {
+    for (let start = 1; start <= sheetCols; start += colsPerSet) {
+        ws.getColumn(start).width = teamColWidth;
+        for (let index = 0; index < partCount; index += 1) {
+            const idCol = start + 1 + index;
+            if (idCol <= sheetCols) {
+                ws.getColumn(idCol).width = idColWidth;
+            }
+        }
+        if (showTotal) {
+            const totalCol = start + 1 + partCount;
+            if (totalCol <= sheetCols) {
+                ws.getColumn(totalCol).width = totalColWidth;
+            }
+        }
+    }
 }
 
 const SHEET_BORDER = {
@@ -706,23 +967,41 @@ function paintMergedRow(ws, row, colCount, fill) {
 }
 
 /**
- * 観覧画面と同じ3段（各2セット）の xlsx。罫線・見出し色つき。
+ * 観覧一覧と同じ縦向き（2段×3セット）の xlsx。選択色（黄・青）は付けない。
  * @param {ReturnType<typeof buildScoresMatrixAllSets>} matrix
  */
 async function formatScoresMatrixAllSetsWorkbook(matrix) {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('全セット', { views: [{ showGridLines: false }] });
-    const colCount = 1 + (2 * TEAM_COUNT);
-    ws.getColumn(1).width = 22;
-    for (let col = 2; col <= colCount; col += 1) {
-        ws.getColumn(col).width = 16;
-    }
+    const partCount = matrix.participants.length;
+    const showTotal = partCount > 1;
+    const colsPerSet = 1 + partCount + (showTotal ? 1 : 0);
+    const sheetCols = colsPerSet * 3;
+    const totalColWidth = 11;
+    const fittedIdColWidth = excelIdColumnWidth(matrix);
+    const idColWidth = fittedIdColWidth;
+    const idHeaderWraps = matrix.participants.some(
+        (participant) => excelTextWidthUnits(excelClientHeader(participant)) + 2 > idColWidth
+    );
+    const fittedTeamColWidth = excelTeamColumnWidth(matrix);
+    const teamColWidth = Math.min(72, fittedTeamColWidth);
+    const teamNameWraps = teamColWidth < fittedTeamColWidth;
+    const mergedSetHeaderWidth = teamColWidth + partCount * idColWidth + (showTotal ? totalColWidth : 0);
 
-    const currentSet = matrix.currentSet || 1;
-    const currentSetName = matrix.sets[currentSet - 1]?.setName || `セット${currentSet}`;
+    applyExcelColumnWidths(
+        ws,
+        colsPerSet,
+        sheetCols,
+        teamColWidth,
+        idColWidth,
+        totalColWidth,
+        partCount,
+        showTotal
+    );
+
     let row = 1;
 
-    ws.mergeCells(row, 1, row, colCount);
+    ws.mergeCells(row, 1, row, sheetCols);
     const title = ws.getCell(row, 1);
     title.value = '点数集計（全セット一覧）';
     title.font = { name: 'Meiryo', size: 14, bold: true, color: { argb: 'FF212529' } };
@@ -730,128 +1009,132 @@ async function formatScoresMatrixAllSetsWorkbook(matrix) {
     ws.getRow(row).height = 24;
     row += 1;
 
-    ws.mergeCells(row, 1, row, colCount);
-    const meta = ws.getCell(row, 1);
-    meta.value = `操作中: ${currentSetName} / チーム${matrix.currentRound || 1}`;
-    meta.font = { name: 'Meiryo', size: 9, color: { argb: 'FF495057' } };
-    meta.alignment = { vertical: 'middle', horizontal: 'left' };
-    ws.getRow(row).height = 18;
-    row += 1;
-
-    VIEWER_EXPORT_BANDS.forEach((band) => {
-        ws.mergeCells(row, 1, row, colCount);
-        paintSheetCell(ws.getCell(row, 1), {
-            value: band.title,
-            fill: 'FF495057',
-            bold: true,
-            color: 'FFFFFFFF',
-            size: 11,
-            horizontal: 'left'
-        });
-        paintMergedRow(ws, row, colCount, 'FF495057');
-        ws.getRow(row).height = 22;
+    if (matrix.generatedAt) {
+        ws.mergeCells(row, 1, row, sheetCols);
+        const meta = ws.getCell(row, 1);
+        meta.value = `更新: ${new Date(matrix.generatedAt).toLocaleString('ja-JP')}`;
+        meta.font = { name: 'Meiryo', size: 9, color: { argb: 'FF495057' } };
+        meta.alignment = { vertical: 'middle', horizontal: 'left' };
+        ws.getRow(row).height = 18;
         row += 1;
+    }
 
-        const headerRow = row;
-        const teamRow = row + 1;
-        ws.mergeCells(headerRow, 1, teamRow, 1);
-        paintSheetCell(ws.getCell(headerRow, 1), {
-            value: '名前',
-            fill: 'FF495057',
-            bold: true,
-            color: 'FFFFFFFF'
-        });
-        const nameContinued = ws.getCell(teamRow, 1);
-        nameContinued.border = SHEET_BORDER;
-        nameContinued.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF495057' } };
-
-        let col = 2;
-        band.indices.forEach((setIdx) => {
+    VIEWER_EXPORT_SET_ROWS.forEach((setIndices) => {
+        const setHeaderRow = row;
+        let col = 1;
+        let setHeaderLines = 1;
+        setIndices.forEach((setIdx) => {
             const setBlock = matrix.sets[setIdx];
             if (!setBlock) {
                 return;
             }
-            const current = setBlock.set === currentSet;
-            const headFill = current ? 'FFFAB005' : 'FF495057';
-            const headColor = current ? 'FF212529' : 'FFFFFFFF';
-            ws.mergeCells(headerRow, col, headerRow, col + TEAM_COUNT - 1);
-            paintSheetCell(ws.getCell(headerRow, col), {
+            const endCol = col + colsPerSet - 1;
+            ws.mergeCells(setHeaderRow, col, setHeaderRow, endCol);
+            paintSheetCell(ws.getCell(setHeaderRow, col), {
                 value: setBlock.setName,
-                fill: headFill,
+                fill: 'FF343A40',
                 bold: true,
-                color: headColor
-            });
-            for (let i = 1; i < TEAM_COUNT; i += 1) {
-                const spanned = ws.getCell(headerRow, col + i);
-                spanned.border = SHEET_BORDER;
-                spanned.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headFill } };
-            }
-            setBlock.teamNames.forEach((name, i) => {
-                const selected = current && i === (matrix.currentRound || 1) - 1;
-                paintSheetCell(ws.getCell(teamRow, col + i), {
-                    value: name || `チーム${i + 1}`,
-                    fill: selected ? 'FF1C7ED6' : (current ? 'FFFAB005' : 'FFE9ECEF'),
-                    bold: true,
-                    color: selected ? 'FFFFFFFF' : 'FF212529',
-                    size: 9,
-                    wrap: true
-                });
-            });
-            col += TEAM_COUNT;
-        });
-        ws.getRow(headerRow).height = 20;
-        ws.getRow(teamRow).height = 48;
-        row = teamRow + 1;
-
-        matrix.participants.forEach((participant, index) => {
-            const alt = index % 2 === 1;
-            paintSheetCell(ws.getCell(row, 1), {
-                value: viewerNameLabel(participant),
-                fill: 'FFF8F9FA',
-                horizontal: 'left',
+                color: 'FFFFFFFF',
+                size: 11,
                 wrap: true
             });
-            let scoreCol = 2;
-            band.indices.forEach((setIdx) => {
-                const setBlock = matrix.sets[setIdx];
-                const current = Boolean(setBlock) && setBlock.set === currentSet;
-                (participant.scoresBySet[setIdx] || []).forEach((score) => {
-                    paintSheetCell(ws.getCell(row, scoreCol), {
-                        value: Number(score) || 0,
-                        fill: current ? 'FFFFF3BF' : (alt ? 'FFFAFAFA' : 'FFFFFFFF'),
-                        bold: current
-                    });
-                    scoreCol += 1;
-                });
-            });
-            ws.getRow(row).height = 20;
-            row += 1;
-        });
-
-        paintSheetCell(ws.getCell(row, 1), {
-            value: 'チーム合計',
-            fill: 'FFCED4DA',
-            bold: true,
-            horizontal: 'left'
-        });
-        let totalCol = 2;
-        band.indices.forEach((setIdx) => {
-            const setBlock = matrix.sets[setIdx];
-            if (!setBlock) {
-                return;
+            setHeaderLines = Math.max(setHeaderLines, estimateExcelWrapLines(setBlock.setName, mergedSetHeaderWidth));
+            for (let spanCol = col + 1; spanCol <= endCol; spanCol += 1) {
+                const spanned = ws.getCell(setHeaderRow, spanCol);
+                spanned.border = SHEET_BORDER;
+                spanned.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF343A40' } };
             }
-            const current = setBlock.set === currentSet;
-            setBlock.teamTotals.forEach((total) => {
-                paintSheetCell(ws.getCell(row, totalCol), {
-                    value: Number(total) || 0,
-                    fill: current ? 'FFFFE08A' : 'FFCED4DA',
-                    bold: true
-                });
-                totalCol += 1;
-            });
+            col = endCol + 1;
         });
-        ws.getRow(row).height = 22;
-        row += 2;
+        ws.getRow(setHeaderRow).height = excelRowHeightForLines(setHeaderLines);
+        row += 1;
+
+        const idHeaderRow = row;
+        let idHeaderLines = 1;
+        col = 1;
+        setIndices.forEach(() => {
+            paintSheetCell(ws.getCell(idHeaderRow, col), {
+                value: 'チーム',
+                fill: 'FFE9ECEF',
+                bold: true,
+                size: 9
+            });
+            col += 1;
+            matrix.participants.forEach((participant) => {
+                const header = excelClientHeader(participant);
+                if (idHeaderWraps) {
+                    idHeaderLines = Math.max(idHeaderLines, estimateExcelWrapLines(header, idColWidth));
+                }
+                paintSheetCell(ws.getCell(idHeaderRow, col), {
+                    value: header,
+                    fill: 'FFE9ECEF',
+                    bold: true,
+                    size: 9,
+                    wrap: idHeaderWraps
+                });
+                col += 1;
+            });
+            if (showTotal) {
+                paintSheetCell(ws.getCell(idHeaderRow, col), {
+                    value: '合計',
+                    fill: 'FFDEE2E6',
+                    bold: true,
+                    size: 9
+                });
+                col += 1;
+            }
+        });
+        ws.getRow(idHeaderRow).height = idHeaderWraps ? excelRowHeightForLines(idHeaderLines) : 22;
+        row += 1;
+
+        for (let teamIdx = 0; teamIdx < TEAM_COUNT; teamIdx += 1) {
+            const alt = teamIdx % 2 === 1;
+            const scoreFill = alt ? 'FFFAFAFA' : 'FFFFFFFF';
+            let teamLineCount = 1;
+            col = 1;
+            setIndices.forEach((setIdx) => {
+                const setBlock = matrix.sets[setIdx];
+                if (!setBlock) {
+                    return;
+                }
+                const teamLabel = excelTeamLabel(setBlock.teamNames[teamIdx], teamIdx);
+                teamLineCount = Math.max(
+                    teamLineCount,
+                    teamNameWraps ? estimateExcelWrapLines(teamLabel, teamColWidth) : 1
+                );
+                paintSheetCell(ws.getCell(row, col), {
+                    value: teamLabel,
+                    fill: 'FFF8F9FA',
+                    bold: true,
+                    horizontal: 'left',
+                    wrap: teamNameWraps,
+                    size: 9
+                });
+                col += 1;
+                matrix.participants.forEach((participant) => {
+                    paintSheetCell(ws.getCell(row, col), {
+                        value: Number(participant.scoresBySet[setIdx][teamIdx]) || 0,
+                        fill: scoreFill,
+                        bold: true,
+                        size: 11
+                    });
+                    col += 1;
+                });
+                if (showTotal) {
+                    paintSheetCell(ws.getCell(row, col), {
+                        value: Number(setBlock.teamTotals[teamIdx]) || 0,
+                        fill: 'FFF1F3F5',
+                        bold: true,
+                        size: 11
+                    });
+                    col += 1;
+                }
+            });
+            ws.getRow(row).height = excelRowHeightForLines(teamLineCount);
+            row += 1;
+        }
+
+        row += 1;
     });
 
     return wb.xlsx.writeBuffer();
@@ -1847,19 +2130,25 @@ io.on('connection', (socket) => {
 // ローカルIPアドレスを取得
 function getLocalIPAddress() {
     const interfaces = os.networkInterfaces();
+    const candidates = [];
     for (const name of Object.keys(interfaces)) {
         for (const iface of interfaces[name]) {
-            // IPv4で、内部アドレスでないものを探す
             if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address;
+                candidates.push(iface.address);
             }
         }
     }
-    return 'localhost';
+    return (
+        candidates.find((ip) => /^192\.168\./.test(ip)) ||
+        candidates.find((ip) => /^10\./.test(ip)) ||
+        candidates.find((ip) => /^172\.(1[6-9]|2\d|3[01])\./.test(ip)) ||
+        candidates[0] ||
+        'localhost'
+    );
 }
 
 function startServer() {
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0', () => {
     const localIP = getLocalIPAddress();
     
     console.log(`

@@ -6,34 +6,65 @@
     <title>観覧用 - 全セット点数一覧</title>
     <link rel="stylesheet" href="styles.css">
     <script src="/socket.io/socket.io.js"></script>
+    <script src="/vendor/html2canvas.min.js" defer></script>
 </head>
 <body class="viewer-excel-page">
-    <header class="viewer-excel-header">
-        <div>
+    <header class="viewer-excel-header viewer-excel-header-compact">
+        <div class="viewer-excel-header-main">
             <h1>点数集計（全セット一覧）</h1>
-            <p class="viewer-excel-lead" id="leadLine">上段：セット1〜2　中段：セット3〜4　下段：セット5〜6。セット名を押すとそのセットだけ大きく表示します。</p>
+            <p class="viewer-excel-meta" id="metaLine">読み込み中…</p>
+            <p class="viewer-excel-lead" id="leadLine" hidden>セット名を押すと拡大表示。</p>
         </div>
         <div class="viewer-excel-actions">
-            <button type="button" class="btn btn-primary" id="refreshBtn">更新</button>
-            <button type="button" class="btn btn-primary" id="csvBtn">Excel</button>
+            <button type="button" class="btn btn-primary btn-viewer-toolbar" id="refreshBtn">更新</button>
+            <button type="button" class="btn btn-primary btn-viewer-toolbar" id="csvBtn">Excel</button>
+            <button type="button" class="btn btn-primary btn-viewer-toolbar" id="shareBtn">QR・共有</button>
             <span class="viewer-excel-live" id="liveBadge" hidden><span class="viewer-excel-dot"></span>接続中</span>
         </div>
     </header>
-
-    <p class="viewer-excel-meta" id="metaLine">読み込み中…</p>
     <div class="viewer-focus-bar" id="focusBar"></div>
     <div class="viewer-excel-stack" id="matrixStack"></div>
     <p id="emptyHint" class="viewer-excel-empty" hidden>接続中の子機がありません。</p>
+    <div id="viewerPhoneSheet" class="viewer-phone-sheet" hidden></div>
+
+    <dialog id="viewerShareDialog" class="viewer-share-dialog">
+        <form method="dialog" class="viewer-share-form">
+            <header class="viewer-share-header">
+                <h2>スマホで共有</h2>
+                <button type="submit" class="viewer-share-close" aria-label="閉じる">×</button>
+            </header>
+            <p class="viewer-share-hint">QRを読むと点数画像が開きます。同じWi‑Fiは不要です。画像を長押しして保存し、LINEなどで送れます。親機のインターネット接続が必要で、リンクは約24時間で消えます。</p>
+            <p class="viewer-share-field">共有する画面</p>
+            <div id="shareScopeBar" class="viewer-share-scope-bar" role="group" aria-label="共有する画面"></div>
+            <div class="viewer-share-actions">
+                <button type="button" class="btn btn-primary btn-viewer-toolbar" id="shareGenerateBtn">QR・PNGを作成</button>
+                <button type="button" class="btn btn-primary btn-viewer-toolbar" id="sharePngDownload" disabled>PNGを保存</button>
+            </div>
+            <div id="shareProgress" class="viewer-share-progress" hidden>
+                <div class="viewer-share-progress-track" aria-hidden="true">
+                    <div id="shareProgressFill" class="viewer-share-progress-fill"></div>
+                </div>
+                <p id="shareProgressLabel" class="viewer-share-progress-label" aria-live="polite"></p>
+            </div>
+            <p id="shareStatus" class="viewer-share-status"></p>
+            <div id="shareQrWrap" class="viewer-share-qr" hidden>
+                <img id="shareQrImg" alt="共有用QRコード" width="200" height="200">
+                <p id="shareUrlText" class="viewer-share-url"></p>
+            </div>
+        </form>
+    </dialog>
 
     <script>
         const socket = io();
         const TEAM_COUNT = 6;
         let focusedSet = null;
         let latestMatrix = null;
-        const BANDS = [
-            { title: 'セット１〜２', indices: [0, 1] },
-            { title: 'セット３〜４', indices: [2, 3] },
-            { title: 'セット５〜６', indices: [4, 5] }
+        let sharePngBlob = null;
+        let sharePngFileName = 'syukei-viewer.png';
+        let shareScopeValue = 0;
+        const VIEWER_SET_ROWS = [
+            [0, 1, 2],
+            [3, 4, 5]
         ];
 
         function escapeHtml(text) {
@@ -61,7 +92,15 @@
             return display || id;
         }
 
-        function groupClass(setBlock, currentSet, teamIndex, currentRound) {
+        function participantHeaderLabel(participant) {
+            const display = (participant.displayName || '').trim();
+            return display || participant.id || '';
+        }
+
+        function groupClass(setBlock, currentSet, teamIndex, currentRound, neutralShare = false) {
+            if (neutralShare) {
+                return 'set-group';
+            }
             const selected = setBlock.set === currentSet && teamIndex === currentRound - 1;
             return [
                 'set-group',
@@ -70,70 +109,83 @@
             ].filter(Boolean).join(' ');
         }
 
-        function buildBand(matrix, band, currentSet, currentRound) {
-            const setHeader = band.indices.map((setIdx) => {
-                const setBlock = matrix.sets[setIdx];
-                const cls = setBlock.set === currentSet ? 'set-group set-group-current' : 'set-group';
-                return `<th colspan="${TEAM_COUNT}" class="${cls}"><button type="button" class="viewer-set-zoom" data-set="${setBlock.set}">${escapeHtml(setBlock.setName)}</button></th>`;
-            }).join('');
+        function setHeaderClass(setBlock, currentSet, isGap, neutralShare = false) {
+            if (neutralShare) {
+                return ['set-group', isGap ? 'viewer-set-gap' : ''].filter(Boolean).join(' ');
+            }
+            return [
+                'set-group',
+                setBlock.set === currentSet ? 'set-group-current' : '',
+                isGap ? 'viewer-set-gap' : ''
+            ].filter(Boolean).join(' ');
+        }
 
-            const teamHeader = band.indices.map((setIdx) => {
-                const setBlock = matrix.sets[setIdx];
-                return setBlock.teamNames.map((name, i) =>
-                    `<th class="${groupClass(setBlock, currentSet, i, currentRound)} team-col" title="${escapeHtml(name)}">${escapeHtml(formatTeamLabel(name, i))}</th>`
-                ).join('');
-            }).join('');
+        function buildVerticalMatrix(matrix, setIndices, currentSet, currentRound, options = {}) {
+            const tableClass = options.tableClass ? ` ${options.tableClass}` : '';
+            const wrapClass = options.wrapClass ? ` ${options.wrapClass}` : '';
+            const sectionClass = options.sectionClass || 'viewer-excel-band-row';
+            const neutralShare = Boolean(options.neutralShare);
+            const partCount = matrix.participants.length;
+            const colsPerSet = partCount + 2;
 
-            const body = matrix.participants.map((p) => {
-                const scores = band.indices.map((setIdx) => {
-                    const setBlock = matrix.sets[setIdx];
-                    return p.scoresBySet[setIdx].map((score, i) =>
-                        `<td class="num ${groupClass(setBlock, currentSet, i, currentRound)}">${score}</td>`
-                    ).join('');
+            const tables = setIndices.map((setIdx) => {
+                const setBlock = matrix.sets[setIdx];
+                const cls = setHeaderClass(setBlock, currentSet, false, neutralShare);
+                const title = escapeHtml(setBlock.setName);
+                const inner = neutralShare
+                    ? title
+                    : `<button type="button" class="viewer-set-zoom" data-set="${setBlock.set}">${title}</button>`;
+                const setHeaderRow = `<th colspan="${colsPerSet}" class="${cls}">${inner}</th>`;
+                const idThs = matrix.participants
+                    .map(
+                        (p) =>
+                            `<th class="viewer-id-col" title="${escapeHtml(nameLabel(p))}">${escapeHtml(participantHeaderLabel(p))}</th>`
+                    )
+                    .join('');
+                const idHeaderRow = `<th class="viewer-set-team-hdr">チーム</th>${idThs}<th class="viewer-col-total-hdr">合計</th>`;
+                const bodyRows = Array.from({ length: TEAM_COUNT }, (_, teamIdx) => {
+                    const group = groupClass(setBlock, currentSet, teamIdx, currentRound, neutralShare);
+                    const teamLabel = formatTeamLabel(setBlock.teamNames[teamIdx], teamIdx);
+                    const teamCell = `<th class="team-row-label ${group}" title="${escapeHtml(setBlock.teamNames[teamIdx])}">${escapeHtml(teamLabel)}</th>`;
+                    const scores = matrix.participants
+                        .map((p) => `<td class="num ${group}">${p.scoresBySet[setIdx][teamIdx]}</td>`)
+                        .join('');
+                    const rowTotal = `<td class="num subtotal-col ${group}">${setBlock.teamTotals[teamIdx]}</td>`;
+                    return `<tr>${teamCell}${scores}${rowTotal}</tr>`;
                 }).join('');
+                const colgroup =
+                    '<col class="viewer-col-team-label">' +
+                    matrix.participants.map(() => '<col class="viewer-col-id">').join('') +
+                    '<col class="viewer-col-total">';
                 return `
-                    <tr>
-                        <td class="sticky-col sticky-name" title="${escapeHtml(p.id)}">${escapeHtml(nameLabel(p))}</td>
-                        ${scores}
-                    </tr>
+                    <table class="excel-matrix viewer-matrix-stacked${tableClass}">
+                        <colgroup>${colgroup}</colgroup>
+                        <thead>
+                            <tr class="head-set-row">${setHeaderRow}</tr>
+                            <tr class="head-id-row">${idHeaderRow}</tr>
+                        </thead>
+                        <tbody>${bodyRows}</tbody>
+                    </table>
                 `;
             }).join('');
 
-            const totals = band.indices.map((setIdx) => {
-                const setBlock = matrix.sets[setIdx];
-                return setBlock.teamTotals.map((t, i) =>
-                    `<td class="num ${groupClass(setBlock, currentSet, i, currentRound)}">${t}</td>`
-                ).join('');
-            }).join('');
-
-            const cols = `<col class="viewer-col-name">${band.indices.map(() =>
-                Array.from({ length: TEAM_COUNT }, () => '<col class="viewer-col-team">').join('')
-            ).join('')}`;
-
             return `
-                <section class="viewer-excel-band">
-                    <h2 class="viewer-excel-band-title">${escapeHtml(band.title)}</h2>
-                    <div class="viewer-excel-wrap">
-                        <table class="excel-matrix">
-                            <colgroup>${cols}</colgroup>
-                            <thead>
-                                <tr class="head-set-row">
-                                    <th class="sticky-col sticky-name" rowspan="2">名前</th>
-                                    ${setHeader}
-                                </tr>
-                                <tr class="head-team-row">${teamHeader}</tr>
-                            </thead>
-                            <tbody>${body}</tbody>
-                            <tfoot>
-                                <tr class="totals-row">
-                                    <td class="sticky-col">チーム合計</td>
-                                    ${totals}
-                                </tr>
-                            </tfoot>
-                        </table>
+                <section class="viewer-excel-band ${sectionClass}">
+                    <div class="viewer-excel-wrap viewer-excel-wrap-unified${wrapClass}">
+                        <div class="viewer-set-row">${tables}</div>
                     </div>
                 </section>
             `;
+        }
+
+        function buildOverview(matrix, currentSet, currentRound) {
+            return VIEWER_SET_ROWS.map((indices, rowIdx) =>
+                buildVerticalMatrix(matrix, indices, currentSet, currentRound, {
+                    tableClass: 'viewer-matrix-stacked--triple',
+                    wrapClass: 'viewer-excel-wrap-row',
+                    sectionClass: rowIdx > 0 ? 'viewer-excel-band-row viewer-excel-band-split' : 'viewer-excel-band-row'
+                })
+            ).join('');
         }
 
         function renderFocusBar(matrix) {
@@ -152,6 +204,361 @@
             if (latestMatrix) {
                 renderMatrix(latestMatrix);
             }
+            return focusedSet;
+        }
+
+        function setShareScope(value) {
+            shareScopeValue = value >= 1 ? value : 0;
+            const bar = document.getElementById('shareScopeBar');
+            if (!bar) {
+                return;
+            }
+            bar.querySelectorAll('[data-scope]').forEach((button) => {
+                const active = Number(button.dataset.scope) === shareScopeValue;
+                button.classList.toggle('is-active', active);
+            });
+        }
+
+        function renderShareScopeOptions(matrix) {
+            const bar = document.getElementById('shareScopeBar');
+            if (!bar) {
+                return;
+            }
+            const defaultScope = focusedSet || 0;
+            shareScopeValue = defaultScope;
+            const buttons = [
+                `<button type="button" class="viewer-share-scope-btn${defaultScope ? '' : ' is-active'}" data-scope="0">一覧（全6セット）</button>`
+            ];
+            matrix.sets.forEach((setBlock) => {
+                const active = defaultScope === setBlock.set ? ' is-active' : '';
+                buttons.push(
+                    `<button type="button" class="viewer-share-scope-btn${active}" data-scope="${setBlock.set}">${escapeHtml(setBlock.setName)}</button>`
+                );
+            });
+            bar.innerHTML = buttons.join('');
+        }
+
+        function applyShareScopeView(scopeValue) {
+            if (scopeValue >= 1) {
+                setFocusedSet(scopeValue);
+            } else {
+                setFocusedSet(0);
+            }
+        }
+
+        let lastShareReady = true;
+
+        function buildSharePublicUrl(resourcePath) {
+            return fetch('/api/server-info', { cache: 'no-store' })
+                .then((res) => res.json())
+                .then((info) => {
+                    const host = info.shareHost || info.lanIp || location.hostname;
+                    const port = info.port || location.port || '5555';
+                    lastShareReady = Boolean(info.shareReady);
+                    return `http://${host}:${port}${resourcePath}`;
+                });
+        }
+
+        function buildPhoneShareHtml(matrix, setIndices, currentSet, currentRound) {
+            if (setIndices.length >= 6) {
+                return VIEWER_SET_ROWS.map((indices, rowIdx) =>
+                    buildVerticalMatrix(matrix, indices, currentSet, currentRound, {
+                        tableClass: 'viewer-matrix-stacked--triple',
+                        wrapClass: 'viewer-phone-wrap',
+                        sectionClass: rowIdx > 0 ? 'viewer-phone-band viewer-phone-band-split' : 'viewer-phone-band',
+                        neutralShare: true
+                    })
+                ).join('');
+            }
+            return buildVerticalMatrix(matrix, setIndices, currentSet, currentRound, {
+                tableClass: setIndices.length === 1 ? 'viewer-matrix-stacked--focus' : 'viewer-matrix-stacked--triple',
+                wrapClass: 'viewer-phone-wrap',
+                sectionClass: 'viewer-phone-band',
+                neutralShare: true
+            });
+        }
+
+        function phoneCellBoxExtra(style) {
+            return (
+                parseFloat(style.paddingLeft) +
+                parseFloat(style.paddingRight) +
+                parseFloat(style.borderLeftWidth) +
+                parseFloat(style.borderRightWidth)
+            );
+        }
+
+        function applyUniformScoreGrid(root) {
+            const teamSample = root.querySelector('.team-row-label');
+            const scoreSample = root.querySelector('.head-id-row .viewer-id-col, .viewer-id-col');
+            if (!teamSample) {
+                return;
+            }
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return;
+            }
+            const teamStyle = getComputedStyle(teamSample);
+            ctx.font = `${teamStyle.fontWeight} ${teamStyle.fontSize} ${teamStyle.fontFamily}`;
+            let teamText = 0;
+            const seenTeams = new Set();
+            root.querySelectorAll('.team-row-label').forEach((cell) => {
+                const text = cell.textContent || '';
+                if (seenTeams.has(text)) {
+                    return;
+                }
+                seenTeams.add(text);
+                teamText = Math.max(teamText, ctx.measureText(text).width);
+            });
+            const scoreStyle = scoreSample ? getComputedStyle(scoreSample) : teamStyle;
+            ctx.font = `${scoreStyle.fontWeight} ${scoreStyle.fontSize} ${scoreStyle.fontFamily}`;
+            let idText = ctx.measureText('100').width;
+            root.querySelectorAll('.head-id-row .viewer-id-col').forEach((cell) => {
+                idText = Math.max(idText, ctx.measureText(cell.textContent || '').width);
+            });
+            const totalText = Math.max(ctx.measureText('合計').width, ctx.measureText('100').width);
+            const teamPx = Math.ceil(teamText + phoneCellBoxExtra(teamStyle) + 4);
+            const idPx = Math.ceil(idText + phoneCellBoxExtra(scoreStyle) + 8);
+            const totalPx = Math.ceil(totalText + phoneCellBoxExtra(scoreStyle) + 8);
+            root.style.setProperty('--viewer-team-col', `${teamPx}px`);
+            root.style.setProperty('--viewer-id-col', `${idPx}px`);
+            root.style.setProperty('--viewer-score-col', `${totalPx}px`);
+            root.querySelectorAll('table.viewer-matrix-stacked').forEach((table) => {
+                const teamCols = table.querySelectorAll('col.viewer-col-team-label').length;
+                const idCols = table.querySelectorAll('col.viewer-col-id').length;
+                const totalCols = table.querySelectorAll('col.viewer-col-total').length;
+                table.style.width = `${teamCols * teamPx + idCols * idPx + totalCols * totalPx}px`;
+            });
+        }
+
+        function fitViewerTablesToWindow(stack) {
+            const targets = [...stack.querySelectorAll('.viewer-set-row')];
+            if (!targets.length) {
+                return;
+            }
+            targets.forEach((target) => {
+                target.style.zoom = '1';
+            });
+            let scale = Infinity;
+            targets.forEach((target) => {
+                const wrap = target.closest('.viewer-excel-wrap');
+                if (!wrap || !target.offsetWidth || !target.offsetHeight) {
+                    return;
+                }
+                const availW = Math.max(0, wrap.clientWidth - 2);
+                const availH = Math.max(0, wrap.clientHeight - 2);
+                if (availW > 0) {
+                    scale = Math.min(scale, availW / target.offsetWidth);
+                }
+                if (availH > 0) {
+                    scale = Math.min(scale, availH / target.offsetHeight);
+                }
+            });
+            if (!Number.isFinite(scale)) {
+                return;
+            }
+            const capped = Math.min(1.75, Math.max(1, scale));
+            const zoom = String(Math.round(capped * 1000) / 1000);
+            targets.forEach((target) => {
+                target.style.zoom = zoom;
+            });
+        }
+
+        async function capturePhonePng(matrix, setIndices, currentSet, currentRound) {
+            if (typeof html2canvas !== 'function') {
+                throw new Error('画像生成ライブラリの読み込みに失敗しました');
+            }
+            const sheet = document.getElementById('viewerPhoneSheet');
+            sheet.className = 'viewer-phone-sheet viewer-phone-sheet--matrix';
+            sheet.style.width = 'max-content';
+            sheet.style.zIndex = '2';
+            sheet.innerHTML = `<div class="viewer-phone-stack">${buildPhoneShareHtml(matrix, setIndices, currentSet, currentRound)}</div>`;
+            sheet.hidden = false;
+            await new Promise((resolve) => {
+                requestAnimationFrame(() => requestAnimationFrame(resolve));
+            });
+            applyUniformScoreGrid(sheet);
+            await new Promise((resolve) => {
+                requestAnimationFrame(() => requestAnimationFrame(resolve));
+            });
+            const captureWidth = Math.ceil(sheet.scrollWidth) + 8;
+            const captureHeight = Math.ceil(sheet.scrollHeight) + 8;
+            try {
+                const canvas = await html2canvas(sheet, {
+                    backgroundColor: '#f1f3f5',
+                    scale: 2,
+                    width: captureWidth,
+                    height: captureHeight,
+                    windowWidth: captureWidth + 40,
+                    windowHeight: captureHeight + 40,
+                    scrollX: 0,
+                    scrollY: 0,
+                    useCORS: true,
+                    logging: false
+                });
+                return await new Promise((resolve, reject) => {
+                    canvas.toBlob((blob) => {
+                        if (!blob) {
+                            reject(new Error('PNGの作成に失敗しました'));
+                            return;
+                        }
+                        resolve(blob);
+                    }, 'image/png');
+                });
+            } finally {
+                sheet.hidden = true;
+                sheet.innerHTML = '';
+                sheet.className = 'viewer-phone-sheet';
+                sheet.style.width = '';
+                sheet.style.zIndex = '';
+                sheet.style.removeProperty('--viewer-team-col');
+                sheet.style.removeProperty('--viewer-id-col');
+                sheet.style.removeProperty('--viewer-score-col');
+            }
+        }
+
+        function beginShareProgress() {
+            const box = document.getElementById('shareProgress');
+            const fill = document.getElementById('shareProgressFill');
+            const label = document.getElementById('shareProgressLabel');
+            box.hidden = false;
+            let value = 2;
+            let caption = '画像を作成しています';
+            let uploadStartedAt = 0;
+            let uploadFrom = 0;
+            const paint = () => {
+                const shown = Math.min(99, Math.floor(value));
+                fill.style.width = `${shown}%`;
+                label.textContent = `${caption}　${shown}%`;
+            };
+            paint();
+            const timer = setInterval(() => {
+                if (!uploadStartedAt) {
+                    value += (14 - value) * 0.12;
+                } else {
+                    const elapsed = Date.now() - uploadStartedAt;
+                    const span = 96 - uploadFrom;
+                    const eased = 1 - Math.exp(-elapsed / 9000);
+                    const next = uploadFrom + span * eased;
+                    value = Math.max(value, Math.min(98.5, next));
+                }
+                paint();
+            }, 200);
+            return {
+                setStage(_nextCap, nextCaption) {
+                    caption = nextCaption;
+                    if (!uploadStartedAt) {
+                        uploadStartedAt = Date.now();
+                        uploadFrom = value;
+                    }
+                    paint();
+                },
+                finish() {
+                    clearInterval(timer);
+                    const from = value;
+                    const started = Date.now();
+                    const step = () => {
+                        const t = Math.min(1, (Date.now() - started) / 700);
+                        value = from + (100 - from) * t;
+                        fill.style.width = `${value}%`;
+                        label.textContent = t < 1 ? `${caption}　${Math.floor(value)}%` : '完了　100%';
+                        if (t < 1) {
+                            requestAnimationFrame(step);
+                        }
+                    };
+                    step();
+                },
+                stop() {
+                    clearInterval(timer);
+                }
+            };
+        }
+
+        async function generateViewerShare() {
+            const status = document.getElementById('shareStatus');
+            const qrWrap = document.getElementById('shareQrWrap');
+            const qrImg = document.getElementById('shareQrImg');
+            const urlText = document.getElementById('shareUrlText');
+            const downloadBtn = document.getElementById('sharePngDownload');
+            const generateBtn = document.getElementById('shareGenerateBtn');
+            const scopeBar = document.getElementById('shareScopeBar');
+
+            if (!latestMatrix?.participants?.length) {
+                status.textContent = '子機が接続されていないため共有できません。';
+                return;
+            }
+
+            const scopeValue = shareScopeValue;
+            const scopeLabel =
+                scopeBar?.querySelector(`[data-scope="${scopeValue}"]`)?.textContent?.trim() || '一覧';
+            const setIndices = scopeValue >= 1 ? [scopeValue - 1] : VIEWER_SET_ROWS.flat();
+
+            generateBtn.disabled = true;
+            status.textContent = '';
+            qrWrap.hidden = true;
+            downloadBtn.disabled = true;
+            const progress = beginShareProgress();
+
+            try {
+                const blob = await capturePhonePng(
+                    latestMatrix,
+                    setIndices,
+                    latestMatrix.currentSet || 1,
+                    latestMatrix.currentRound || 1
+                );
+                sharePngBlob = blob;
+                const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+                sharePngFileName = `syukei-${scopeValue === 0 ? 'all' : `set${scopeValue}`}-${stamp}.png`;
+
+                progress.setStage(92, '公開用URLとQRを作成しています');
+                const uploadUrl = `/api/viewer-share?scope=${encodeURIComponent(scopeValue)}&label=${encodeURIComponent(scopeLabel)}`;
+                const uploadRes = await fetch(uploadUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'image/png' },
+                    body: blob
+                });
+                const upload = await uploadRes.json();
+                if (!uploadRes.ok || !upload.ok) {
+                    throw new Error(upload.error || 'サーバーへの保存に失敗しました');
+                }
+
+                progress.finish();
+                qrImg.src = upload.dataUrl;
+                urlText.textContent = upload.publicUrl;
+                qrWrap.hidden = false;
+                downloadBtn.disabled = false;
+                status.textContent = 'QRを読むと画像が開きます（Wi‑Fiは同じでなくてよい）。約24時間有効。「PNGを保存」でPC保存もできます。';
+            } catch (error) {
+                progress.stop();
+                document.getElementById('shareProgress').hidden = true;
+                status.textContent = error instanceof Error ? error.message : '共有の作成に失敗しました';
+            } finally {
+                generateBtn.disabled = false;
+            }
+        }
+
+        function openShareDialog() {
+            if (!latestMatrix) {
+                return;
+            }
+            renderShareScopeOptions(latestMatrix);
+            document.getElementById('shareStatus').textContent = '';
+            document.getElementById('shareProgress').hidden = true;
+            document.getElementById('shareQrWrap').hidden = true;
+            document.getElementById('sharePngDownload').disabled = !sharePngBlob;
+            document.getElementById('viewerShareDialog').showModal();
+        }
+
+        function downloadSharePng() {
+            if (!sharePngBlob) {
+                return;
+            }
+            const url = URL.createObjectURL(sharePngBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = sharePngFileName;
+            a.click();
+            URL.revokeObjectURL(url);
         }
 
         function renderMatrix(matrix) {
@@ -166,24 +573,27 @@
             renderFocusBar(matrix);
 
             if (!matrix.participants.length) {
+                stack.className = 'viewer-excel-stack';
                 stack.innerHTML = '';
                 empty.hidden = false;
+                lead.hidden = true;
             } else if (focusedSet && matrix.sets[focusedSet - 1]) {
                 empty.hidden = true;
                 const setBlock = matrix.sets[focusedSet - 1];
-                stack.innerHTML = buildBand(
-                    matrix,
-                    { title: setBlock.setName, indices: [focusedSet - 1] },
-                    currentSet,
-                    currentRound
-                );
-                lead.textContent = `${setBlock.setName} を大きく表示中。一覧で全セットに戻ります。`;
+                stack.className = 'viewer-excel-stack viewer-excel-stack-focused';
+                stack.innerHTML = buildVerticalMatrix(matrix, [focusedSet - 1], currentSet, currentRound, {
+                    tableClass: 'viewer-matrix-stacked--focus',
+                    wrapClass: 'viewer-excel-wrap-focus'
+                });
+                lead.hidden = false;
+                lead.textContent = `${setBlock.setName} を拡大表示中。一覧で戻ります。`;
             } else {
                 focusedSet = null;
                 document.body.classList.remove('is-focused');
                 empty.hidden = true;
-                stack.innerHTML = BANDS.map((band) => buildBand(matrix, band, currentSet, currentRound)).join('');
-                lead.textContent = '上段：セット1〜2　中段：セット3〜4　下段：セット5〜6。セット名を押すとそのセットだけ大きく表示します。';
+                stack.className = 'viewer-excel-stack viewer-excel-stack-overview';
+                stack.innerHTML = buildOverview(matrix, currentSet, currentRound);
+                lead.hidden = true;
             }
 
             const currentSetName = matrix.sets[currentSet - 1]?.setName || `セット${currentSet}`;
@@ -192,6 +602,11 @@
                 parts.push(`更新: ${new Date(matrix.generatedAt).toLocaleString('ja-JP')}`);
             }
             meta.textContent = parts.join('　');
+            renderShareScopeOptions(matrix);
+            if (matrix.participants.length) {
+                applyUniformScoreGrid(stack);
+                requestAnimationFrame(() => fitViewerTablesToWindow(stack));
+            }
         }
 
         async function loadMatrix() {
@@ -222,9 +637,26 @@
             setFocusedSet(Number(button.dataset.set));
         });
 
+        window.addEventListener('resize', () => {
+            const stack = document.getElementById('matrixStack');
+            if (stack?.querySelector('table.viewer-matrix-stacked')) {
+                fitViewerTablesToWindow(stack);
+            }
+        });
+
         document.getElementById('refreshBtn').addEventListener('click', loadMatrix);
         document.getElementById('csvBtn').addEventListener('click', () => {
             window.location.href = '/api/scores-matrix-all.xlsx';
+        });
+        document.getElementById('shareBtn').addEventListener('click', openShareDialog);
+        document.getElementById('shareGenerateBtn').addEventListener('click', generateViewerShare);
+        document.getElementById('sharePngDownload').addEventListener('click', downloadSharePng);
+        document.getElementById('shareScopeBar').addEventListener('click', (event) => {
+            const button = event.target.closest('[data-scope]');
+            if (!button) {
+                return;
+            }
+            setShareScope(Number(button.dataset.scope));
         });
 
         function bindRealtime() {

@@ -550,8 +550,15 @@ app.on('window-all-closed', () => {
     }
 });
 
-app.on('before-quit', () => {
-    if (serverProcess) {
-        serverProcess.kill('SIGTERM');
+let quitAfterServerStop = false;
+
+app.on('before-quit', (event) => {
+    if (quitAfterServerStop || !serverProcess) {
+        return;
     }
+    event.preventDefault();
+    quitAfterServerStop = true;
+    stopServerProcess()
+        .catch((err) => console.error('[server] quit shutdown failed:', err))
+        .finally(() => app.quit());
 });

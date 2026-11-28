@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>点数共有画像</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', 'Meiryo', system-ui, sans-serif;
+            background: #212529;
+            color: #f8f9fa;
+            min-height: 100vh;
+            padding: 12px 12px 28px;
+        }
+        h1 {
+            margin: 0 0 8px;
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+        .lead {
+            margin: 0 0 12px;
+            font-size: 0.88rem;
+            line-height: 1.45;
+            color: #ced4da;
+        }
+        .img-wrap {
+            background: #fff;
+            border-radius: 8px;
+            overflow: auto;
+            line-height: 0;
+            min-height: 120px;
+        }
+        img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .status,
+        .err {
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+        .status {
+            color: #adb5bd;
+        }
+        .err {
+            color: #ff8787;
+        }
+        a.direct-png {
+            display: inline-block;
+            margin-top: 10px;
+            color: #74c0fc;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>点数集計の共有</h1>
+    <p class="lead">画像を長押しして保存し、LINEなどで送れます。同じWi‑Fiの端末端末＋親機サーバー起動中が必要です。</p>
+    <p id="loadLine" class="status">読み込み中…</p>
+    <div class="img-wrap">
+        <img id="shareImage" alt="点数集計" hidden>
+    </div>
+    <p id="errorLine" class="err" hidden></p>
+    <a id="directPngLink" class="direct-png" href="#" hidden>画像だけを開く</a>
+    <script>
+        (function () {
+            const parts = location.pathname.split('/').filter(Boolean);
+            const id = parts[parts.length - 1] || '';
+            const img = document.getElementById('shareImage');
+            const loadLine = document.getElementById('loadLine');
+            const err = document.getElementById('errorLine');
+            const directLink = document.getElementById('directPngLink');
+
+            const showError = (message) => {
+                loadLine.hidden = true;
+                err.hidden = false;
+                err.textContent = message;
+            };
+
+            if (!/^[a-f0-9]{24}$/i.test(id)) {
+                showError('URLが不正です。QRをもう一度作成してください。');
+                return;
+            }
+
+            const src = `/api/viewer-share/${encodeURIComponent(id)}.png`;
+            directLink.href = src;
+            directLink.hidden = false;
+
+            fetch(src, { cache: 'no-store' })
+                .then((res) => {
+                    if (!res.ok) {
+                        throw new Error(res.status === 404 ? 'not-found' : 'http');
+                    }
+                    return res.blob();
+                })
+                .then((blob) => {
+                    if (!blob.type || blob.type === 'application/octet-stream') {
+                        img.src = URL.createObjectURL(new Blob([blob], { type: 'image/png' }));
+                    } else {
+                        img.src = URL.createObjectURL(blob);
+                    }
+                    img.hidden = false;
+                    loadLine.hidden = true;
+                })
+                .catch(() => {
+                    showError(
+                        '画像を読み込めませんでした。同じWi‑Fiか確認し、親機が起動中か、QR作成から2時間以内かを確認してください。'
+                    );
+                });
+        })();
+    </script>
+</body>
+</html>
